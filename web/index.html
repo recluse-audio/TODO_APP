@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TODO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body class="bg-slate-950 text-slate-100 antialiased">
+  <div id="app" class="h-screen flex flex-col">
+    <header class="border-b border-slate-800 px-5 py-3 flex items-center gap-4 shrink-0">
+      <h1 class="text-sm font-semibold tracking-wide text-slate-300">TODO</h1>
+      <div id="conn-indicator" class="text-xs text-slate-500">connecting…</div>
+      <div class="ml-auto flex items-center gap-2">
+        <button data-tab="hierarchy" class="tab-btn px-3 py-1 rounded text-xs font-medium">Hierarchy</button>
+        <button data-tab="groups" class="tab-btn px-3 py-1 rounded text-xs font-medium">Groups</button>
+        <button data-tab="tasks" class="tab-btn px-3 py-1 rounded text-xs font-medium">Tasks</button>
+      </div>
+    </header>
+    <main class="flex-1 flex overflow-hidden">
+      <aside id="sidebar" class="w-80 border-r border-slate-800 overflow-y-auto p-3"></aside>
+      <section id="detail" class="flex-1 overflow-y-auto p-8"></section>
+    </main>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
