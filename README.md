@@ -22,7 +22,7 @@ The server stays running for the session. Stop with Ctrl+C.
 
 ### How it works
 
-- Reads every file in `GOALS/` and `PROJECTS/<CATEGORY>/` and parses the YAML frontmatter.
+- Reads every file in `GOALS/` and `TASKS/` and parses the YAML frontmatter.
 - Watches both directories for changes. When anything saves (whether by you, the GUI, or Claude), all open browser tabs receive a server-sent event and re-render within ~100ms.
 - The GUI lets you toggle criteria checkboxes and change item status. Both round-trip through targeted in-place edits to the underlying `.md` file — no full YAML rewrite, so your formatting and comments are preserved.
 - The `.md` files remain the **single source of truth**. Claude reads/writes them normally; the GUI does the same. Neither side has a separate state store.

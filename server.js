@@ -11,7 +11,7 @@ const url = require('url');
 const PORT = 3737;
 const ROOT = path.resolve(__dirname, '..');
 const GOALS_DIR = path.join(ROOT, 'GOALS');
-const PROJECTS_DIR = path.join(ROOT, 'PROJECTS');
+const TASKS_DIR = path.join(ROOT, 'TASKS');
 const WEB_DIR = path.join(__dirname, 'web');
 
 // ---------- minimal YAML frontmatter parser ----------
@@ -111,19 +111,14 @@ function listGoals() {
 }
 
 function listTasks() {
-  if (!fs.existsSync(PROJECTS_DIR)) return [];
-  const tasks = [];
-  for (const cat of fs.readdirSync(PROJECTS_DIR)) {
-    const catDir = path.join(PROJECTS_DIR, cat);
-    if (!fs.statSync(catDir).isDirectory()) continue;
-    for (const f of fs.readdirSync(catDir)) {
-      if (!f.startsWith('T-') || !f.endsWith('.md')) continue;
-      const filepath = path.join(catDir, f);
+  if (!fs.existsSync(TASKS_DIR)) return [];
+  return fs.readdirSync(TASKS_DIR)
+    .filter(f => f.startsWith('T-') && f.endsWith('.md'))
+    .map(f => {
+      const filepath = path.join(TASKS_DIR, f);
       const { frontmatter, body } = parseFile(filepath);
-      tasks.push({ ...frontmatter, body: body.trim(), _file: filepath });
-    }
-  }
-  return tasks;
+      return { ...frontmatter, body: body.trim(), _file: filepath };
+    });
 }
 
 function snapshot() {
@@ -168,11 +163,7 @@ function setStatus(kind, id, newStatus) {
   if (kind === 'goal') {
     filepath = path.join(GOALS_DIR, `${id}.md`);
   } else {
-    // Find task across categories
-    for (const cat of fs.readdirSync(PROJECTS_DIR)) {
-      const candidate = path.join(PROJECTS_DIR, cat, `${id}.md`);
-      if (fs.existsSync(candidate)) { filepath = candidate; break; }
-    }
+    filepath = path.join(TASKS_DIR, `${id}.md`);
   }
   if (!filepath || !fs.existsSync(filepath)) throw new Error(`${kind} ${id} not found`);
   const raw = fs.readFileSync(filepath, 'utf8');
@@ -209,7 +200,7 @@ function watchDir(dir, recursive = false) {
 }
 
 watchDir(GOALS_DIR);
-watchDir(PROJECTS_DIR, true);
+watchDir(TASKS_DIR);
 
 // ---------- HTTP server ----------
 

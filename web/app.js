@@ -29,11 +29,13 @@ const el = (tag, attrs = {}, ...children) => {
 const goalById = (id) => state.data.goals.find(g => g.id === id);
 const taskById = (id) => state.data.tasks.find(t => t.id === id);
 const tasksForGoal = (gid) => state.data.tasks.filter(t => Array.isArray(t.goals) && t.goals.includes(gid));
-const subGoalsOf = (gid) => state.data.goals.filter(g => g.parent_goal === gid);
-const topLevelGoals = () => state.data.goals.filter(g => !g.parent_goal);
+const byPriorityDesc = (a, b) => (b.priority ?? -Infinity) - (a.priority ?? -Infinity);
+const subGoalsOf = (gid) => state.data.goals.filter(g => g.parent_goal === gid).sort(byPriorityDesc);
+const topLevelGoals = () => state.data.goals.filter(g => !g.parent_goal).sort(byPriorityDesc);
 const allGroups = () => {
   const s = new Set();
   for (const g of state.data.goals) for (const grp of (g.groups || [])) s.add(grp);
+  for (const t of state.data.tasks) for (const grp of (t.groups || [])) s.add(grp);
   return Array.from(s).sort();
 };
 
@@ -118,11 +120,11 @@ function renderGroups(sb) {
   const groups = allGroups();
   for (const grp of groups) {
     sb.appendChild(el('div', { class: 'sb-section-title' }, grp));
-    for (const g of state.data.goals.filter(x => (x.groups || []).includes(grp))) {
+    for (const g of state.data.goals.filter(x => (x.groups || []).includes(grp)).sort(byPriorityDesc)) {
       sb.appendChild(goalSidebarItem(g));
     }
   }
-  const ungrouped = state.data.goals.filter(g => !g.groups || g.groups.length === 0);
+  const ungrouped = state.data.goals.filter(g => !g.groups || g.groups.length === 0).sort(byPriorityDesc);
   if (ungrouped.length) {
     sb.appendChild(el('div', { class: 'sb-section-title' }, '(ungrouped)'));
     for (const g of ungrouped) sb.appendChild(goalSidebarItem(g));
@@ -130,19 +132,24 @@ function renderGroups(sb) {
 }
 
 function renderTasksList(sb) {
-  const byCat = {};
-  for (const t of state.data.tasks) {
-    const c = t.category || '(uncategorized)';
-    (byCat[c] ||= []).push(t);
-  }
-  const cats = Object.keys(byCat).sort();
-  if (cats.length === 0) {
+  if (state.data.tasks.length === 0) {
     sb.appendChild(el('div', { class: 'text-xs text-slate-500 p-3' }, 'No tasks yet.'));
     return;
   }
-  for (const cat of cats) {
-    sb.appendChild(el('div', { class: 'sb-section-title' }, cat));
-    for (const t of byCat[cat]) sb.appendChild(taskSidebarItem(t));
+  const byPrimary = {};
+  const ungrouped = [];
+  for (const t of state.data.tasks) {
+    const primary = Array.isArray(t.groups) && t.groups.length ? t.groups[0] : null;
+    if (!primary) ungrouped.push(t);
+    else (byPrimary[primary] ||= []).push(t);
+  }
+  for (const grp of Object.keys(byPrimary).sort()) {
+    sb.appendChild(el('div', { class: 'sb-section-title' }, grp));
+    for (const t of byPrimary[grp]) sb.appendChild(taskSidebarItem(t));
+  }
+  if (ungrouped.length) {
+    sb.appendChild(el('div', { class: 'sb-section-title' }, '(ungrouped)'));
+    for (const t of ungrouped) sb.appendChild(taskSidebarItem(t));
   }
 }
 
@@ -192,7 +199,6 @@ function renderHeader(item, kind) {
       item.target_date ? badge('date', `target ${item.target_date}`) : null,
       item.created ? badge('date', `created ${item.created}`) : null,
       ...(item.groups || []).map(g => badge('group', g)),
-      kind === 'task' && item.category ? badge('group', item.category) : null,
     ),
   );
 }
