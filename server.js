@@ -189,7 +189,7 @@ function quoteYaml(str) {
   return '"' + String(str || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
 }
 
-function serializeGoalFile({ id, title, priority, created, target_date, measurable_outcome, criteria, why, groups, body }) {
+function serializeGoalFile({ id, title, priority, created, target_date, measurable_outcome, criteria, why, conclusion, groups, body }) {
   let fm = `---\nid: ${id}\ntype: goal\ntitle: ${quoteYaml(title)}\npriority: ${priority}\ncreated: ${created}\n`;
   if (target_date) fm += `target_date: ${target_date}\n`;
   fm += `status: active\nmeasurable_outcome: ${quoteYaml(measurable_outcome)}\n`;
@@ -198,6 +198,7 @@ function serializeGoalFile({ id, title, priority, created, target_date, measurab
     for (const c of criteria) fm += `  - { text: ${quoteYaml(c)}, done: false }\n`;
   }
   fm += `sub_goals: []\ngroups: [${(groups || []).join(', ')}]\nrelated_goals: []\ntasks: []\n`;
+  if (conclusion) fm += `conclusion: ${quoteYaml(conclusion)}\n`;
   if (why && why.length) {
     fm += `why:\n`;
     for (const w of why) fm += `  - ${quoteYaml(w)}\n`;

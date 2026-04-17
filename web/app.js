@@ -391,24 +391,19 @@ function renderGroups(sb) {
 }
 
 function renderTasksList(sb) {
-  if (state.data.tasks.length === 0) {
-    sb.appendChild(el('div', { class: 'text-xs text-slate-500 p-3' }, 'No tasks yet.'));
-    return;
-  }
-  const byPrimary = {};
-  const ungrouped = [];
-  for (const t of state.data.tasks) {
-    const primary = Array.isArray(t.groups) && t.groups.length ? t.groups[0] : null;
-    if (!primary) ungrouped.push(t);
-    else (byPrimary[primary] ||= []).push(t);
-  }
-  for (const grp of Object.keys(byPrimary).sort()) {
-    sb.appendChild(el('div', { class: 'sb-section-title' }, grp));
-    for (const t of byPrimary[grp]) sb.appendChild(taskSidebarItem(t));
-  }
-  if (ungrouped.length) {
-    sb.appendChild(el('div', { class: 'sb-section-title' }, '(ungrouped)'));
-    for (const t of ungrouped) sb.appendChild(taskSidebarItem(t));
+  const sections = [
+    { label: 'In Progress', statuses: ['in_progress'] },
+    { label: 'Blocked',     statuses: ['blocked'] },
+    { label: 'Todo',        statuses: ['todo'] },
+    { label: 'Done',        statuses: ['done'] },
+    { label: 'Abandoned',   statuses: ['abandoned'] },
+  ];
+  for (const sec of sections) {
+    const tasks = state.data.tasks
+      .filter(t => sec.statuses.includes(t.status))
+      .sort(byPriorityDesc);
+    sb.appendChild(el('div', { class: 'sb-section-title' }, sec.label));
+    for (const t of tasks) sb.appendChild(taskSidebarItem(t));
   }
 }
 
@@ -532,6 +527,11 @@ function renderGoalDetail(root, g) {
   if (g.body) {
     root.appendChild(sectionTitle('Description'));
     root.appendChild(el('div', { class: 'body-md mb-8' }, ...g.body.split(/\n\n+/).map(p => el('p', {}, p))));
+  }
+
+  if (g.conclusion) {
+    root.appendChild(sectionTitle('Conclusion'));
+    root.appendChild(el('div', { class: 'body-md mb-8' }, ...g.conclusion.split(/\n\n+/).map(p => el('p', {}, p))));
   }
 
   // Cross-references
