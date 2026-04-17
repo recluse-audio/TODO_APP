@@ -350,7 +350,12 @@ function taskSidebarItem(t) {
 }
 
 function renderHierarchy(sb) {
-  sb.appendChild(el('div', { class: 'sb-section-title' }, 'Goals'));
+  const sections = [
+    { label: 'Active', statuses: ['active'] },
+    { label: 'Todo', statuses: ['todo', 'someday'] },
+    { label: 'Completed', statuses: ['completed'] },
+    { label: 'Abandoned', statuses: ['abandoned'] },
+  ];
   const renderNode = (g) => {
     const node = el('div', {}, goalSidebarItem(g));
     const subs = subGoalsOf(g.id);
@@ -361,7 +366,13 @@ function renderHierarchy(sb) {
     }
     return node;
   };
-  for (const g of topLevelGoals()) sb.appendChild(renderNode(g));
+  for (const sec of sections) {
+    const goals = state.data.goals
+      .filter(g => sec.statuses.includes(g.status) && !g.parent_goal)
+      .sort(byPriorityDesc);
+    sb.appendChild(el('div', { class: 'sb-section-title' }, sec.label));
+    for (const g of goals) sb.appendChild(renderNode(g));
+  }
 }
 
 function renderGroups(sb) {
@@ -433,8 +444,8 @@ function statusSelect(kind, current, options) {
 
 function renderHeader(item, kind) {
   const statuses = kind === 'goal'
-    ? ['active', 'someday', 'completed', 'abandoned']
-    : ['todo', 'in_progress', 'blocked', 'done', 'someday', 'abandoned'];
+    ? ['active', 'todo', 'completed', 'abandoned']
+    : ['todo', 'in_progress', 'blocked', 'done', 'abandoned'];
   const deleteBtn = el('button', { class: 'delete-btn', type: 'button', title: `Delete ${kind}` }, '🗑');
   deleteBtn.onclick = () => deleteItem(kind, item.id);
   return el('div', { class: 'mb-6' },

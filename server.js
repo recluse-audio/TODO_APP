@@ -158,8 +158,8 @@ function toggleCriterion(goalId, idx) {
 
 function setStatus(kind, id, newStatus) {
   const valid = {
-    goal: ['active', 'someday', 'completed', 'abandoned'],
-    task: ['todo', 'in_progress', 'blocked', 'done', 'someday', 'abandoned'],
+    goal: ['active', 'todo', 'completed', 'abandoned'],
+    task: ['todo', 'in_progress', 'blocked', 'done', 'abandoned'],
   };
   if (!valid[kind].includes(newStatus)) throw new Error(`Invalid ${kind} status: ${newStatus}`);
   let filepath;
