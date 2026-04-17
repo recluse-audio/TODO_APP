@@ -107,6 +107,264 @@
   font-size: 0.9em;
 }
 
+/* Detail header delete button */
+.delete-btn {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: rgb(71 85 105);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 100ms, background 100ms;
+  flex-shrink: 0;
+}
+.delete-btn:hover { color: rgb(252 165 165); background: rgb(244 63 94 / 0.1); }
+
+/* Criterion delete button */
+.criterion-delete-btn {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: none;
+  color: rgb(71 85 105);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 100ms, color 100ms, border-color 100ms;
+  opacity: 0;
+}
+.mb-2:hover .criterion-delete-btn { opacity: 1; }
+.criterion-delete-btn:hover {
+  background: rgb(244 63 94 / 0.15);
+  border-color: rgb(244 63 94 / 0.4);
+  color: rgb(252 165 165);
+  opacity: 1;
+}
+
+/* Criterion add-task button */
+.criterion-add-task-btn {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: none;
+  color: rgb(71 85 105);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 100ms, color 100ms, border-color 100ms;
+  opacity: 0;
+}
+.mb-2:hover .criterion-add-task-btn { opacity: 1; }
+.criterion-add-task-btn:hover {
+  background: rgb(30 58 138 / 0.4);
+  border-color: rgb(96 165 250);
+  color: rgb(147 197 253);
+  opacity: 1;
+}
+
+/* Criterion → task links */
+.criterion-task-link {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: rgb(147 197 253);
+  background: rgb(30 58 138 / 0.3);
+  border: 1px solid rgb(30 58 138 / 0.5);
+  cursor: pointer;
+  transition: background 100ms, border-color 100ms;
+}
+.criterion-task-link:hover { background: rgb(30 58 138 / 0.6); border-color: rgb(96 165 250); }
+
+/* Satisfies back-link (on task detail) */
+.satisfies-link {
+  display: flex;
+  align-items: baseline;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 100ms;
+}
+.satisfies-link:hover { background: rgb(30 41 59 / 0.5); }
+
+/* Sidebar create buttons */
+.create-btns {
+  display: flex;
+  gap: 6px;
+  padding: 8px 4px 4px;
+}
+.create-btn {
+  flex: 1;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgb(30 41 59);
+  color: rgb(148 163 184);
+  border: 1px solid rgb(51 65 85);
+  cursor: pointer;
+  transition: background 100ms, color 100ms, border-color 100ms;
+}
+.create-btn:hover { background: rgb(51 65 85); color: white; border-color: rgb(71 85 105); }
+
+/* Modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.modal-backdrop.hidden { display: none; }
+.modal-dialog {
+  background: rgb(15 23 42);
+  border: 1px solid rgb(51 65 85);
+  border-radius: 10px;
+  width: 540px;
+  max-width: 95vw;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid rgb(30 41 59);
+  flex-shrink: 0;
+}
+.modal-close {
+  background: none;
+  border: none;
+  color: rgb(100 116 139);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.modal-close:hover { color: white; }
+.modal-form {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.form-field { display: flex; flex-direction: column; gap: 4px; }
+.form-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: rgb(100 116 139); }
+.form-input {
+  background: rgb(30 41 59);
+  border: 1px solid rgb(51 65 85);
+  border-radius: 6px;
+  color: rgb(226 232 240);
+  font-size: 13px;
+  padding: 7px 10px;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  resize: vertical;
+}
+.form-input:focus { outline: none; border-color: rgb(96 165 250); }
+.form-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgb(100 116 139);
+  margin-top: 2px;
+  margin-bottom: -4px;
+}
+.dynamic-row { display: flex; gap: 6px; align-items: center; }
+.dynamic-row .form-input { flex: 1; }
+.dynamic-remove {
+  background: none;
+  border: none;
+  color: rgb(100 116 139);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+.dynamic-remove:hover { color: rgb(252 165 165); }
+.form-add-btn {
+  font-size: 11px;
+  color: rgb(96 165 250);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 0;
+  text-align: left;
+}
+.form-add-btn:hover { color: rgb(147 197 253); }
+.goals-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgb(30 41 59 / 0.4);
+  border: 1px solid rgb(51 65 85);
+  border-radius: 6px;
+  padding: 6px 8px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.goals-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.goals-check-row:hover { background: rgb(30 41 59); }
+.goals-check-row input { cursor: pointer; }
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgb(30 41 59);
+  flex-shrink: 0;
+}
+.modal-btn-cancel {
+  padding: 7px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  background: none;
+  border: 1px solid rgb(51 65 85);
+  color: rgb(148 163 184);
+  cursor: pointer;
+}
+.modal-btn-cancel:hover { background: rgb(30 41 59); color: white; }
+.modal-btn-primary {
+  padding: 7px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  background: rgb(59 130 246);
+  border: none;
+  color: white;
+  cursor: pointer;
+  transition: background 100ms;
+}
+.modal-btn-primary:hover { background: rgb(37 99 235); }
+
 /* Status select */
 .status-select {
   background: rgb(30 41 59);
