@@ -12,6 +12,7 @@ const PORT = 3737;
 const ROOT = path.resolve(__dirname, '..');
 const GOALS_DIR = path.join(ROOT, 'GOALS');
 const TASKS_DIR = path.join(ROOT, 'TASKS');
+const DECISIONS_DIR = path.join(ROOT, 'DECISIONS');
 const WEB_DIR = path.join(__dirname, 'web');
 
 // ---------- minimal YAML frontmatter parser ----------
@@ -102,30 +103,30 @@ function parseScalar(text) {
 
 // ---------- file scanning ----------
 
-function listGoals() {
-  if (!fs.existsSync(GOALS_DIR)) return [];
-  return fs.readdirSync(GOALS_DIR)
-    .filter(f => f.startsWith('G-') && f.endsWith('.md'))
+const KINDS_META = {
+  goal:     { dir: GOALS_DIR,     prefix: 'G-', statuses: ['active', 'todo', 'completed', 'abandoned'] },
+  task:     { dir: TASKS_DIR,     prefix: 'T-', statuses: ['todo', 'in_progress', 'blocked', 'done', 'abandoned'] },
+  decision: { dir: DECISIONS_DIR, prefix: 'D-', statuses: ['open', 'decided', 'abandoned'] },
+};
+
+function listItems(kind) {
+  const meta = KINDS_META[kind];
+  if (!meta || !fs.existsSync(meta.dir)) return [];
+  return fs.readdirSync(meta.dir)
+    .filter(f => f.startsWith(meta.prefix) && f.endsWith('.md'))
     .map(f => {
-      const filepath = path.join(GOALS_DIR, f);
+      const filepath = path.join(meta.dir, f);
       const { frontmatter, body } = parseFile(filepath);
       return { ...frontmatter, body: body.trim(), _file: filepath };
     });
 }
 
-function listTasks() {
-  if (!fs.existsSync(TASKS_DIR)) return [];
-  return fs.readdirSync(TASKS_DIR)
-    .filter(f => f.startsWith('T-') && f.endsWith('.md'))
-    .map(f => {
-      const filepath = path.join(TASKS_DIR, f);
-      const { frontmatter, body } = parseFile(filepath);
-      return { ...frontmatter, body: body.trim(), _file: filepath };
-    });
-}
+const listGoals = () => listItems('goal');
+const listTasks = () => listItems('task');
+const listDecisions = () => listItems('decision');
 
 function snapshot() {
-  return { goals: listGoals(), tasks: listTasks() };
+  return { goals: listGoals(), tasks: listTasks(), decisions: listDecisions() };
 }
 
 // ---------- targeted writers (preserve formatting) ----------
@@ -157,20 +158,12 @@ function toggleCriterion(goalId, idx) {
 }
 
 function setStatus(kind, id, newStatus) {
-  const valid = {
-    goal: ['active', 'todo', 'completed', 'abandoned'],
-    task: ['todo', 'in_progress', 'blocked', 'done', 'abandoned'],
-  };
-  if (!valid[kind].includes(newStatus)) throw new Error(`Invalid ${kind} status: ${newStatus}`);
-  let filepath;
-  if (kind === 'goal') {
-    filepath = path.join(GOALS_DIR, `${id}.md`);
-  } else {
-    filepath = path.join(TASKS_DIR, `${id}.md`);
-  }
-  if (!filepath || !fs.existsSync(filepath)) throw new Error(`${kind} ${id} not found`);
+  const meta = KINDS_META[kind];
+  if (!meta) throw new Error(`Unknown kind: ${kind}`);
+  if (!meta.statuses.includes(newStatus)) throw new Error(`Invalid ${kind} status: ${newStatus}`);
+  const filepath = path.join(meta.dir, `${id}.md`);
+  if (!fs.existsSync(filepath)) throw new Error(`${kind} ${id} not found`);
   const raw = fs.readFileSync(filepath, 'utf8');
-  const eol = raw.includes('\r\n') ? '\r\n' : '\n';
   const updated = raw.replace(/^status:\s*\w+/m, `status: ${newStatus}`);
   fs.writeFileSync(filepath, updated);
 }
@@ -189,7 +182,7 @@ function quoteYaml(str) {
   return '"' + String(str || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
 }
 
-function serializeGoalFile({ id, title, priority, created, target_date, measurable_outcome, criteria, why, conclusion, groups, body }) {
+function serializeGoalFile({ id, title, priority, created, target_date, measurable_outcome, criteria, why, conclusion, groups, body, data }) {
   let fm = `---\nid: ${id}\ntype: goal\ntitle: ${quoteYaml(title)}\npriority: ${priority}\ncreated: ${created}\n`;
   if (target_date) fm += `target_date: ${target_date}\n`;
   fm += `status: active\nmeasurable_outcome: ${quoteYaml(measurable_outcome)}\n`;
@@ -198,6 +191,7 @@ function serializeGoalFile({ id, title, priority, created, target_date, measurab
     for (const c of criteria) fm += `  - { text: ${quoteYaml(c)}, done: false }\n`;
   }
   fm += `sub_goals: []\ngroups: [${(groups || []).join(', ')}]\nrelated_goals: []\ntasks: []\n`;
+  if (data) fm += `data: ${quoteYaml(data)}\n`;
   if (conclusion) fm += `conclusion: ${quoteYaml(conclusion)}\n`;
   if (why && why.length) {
     fm += `why:\n`;
@@ -208,10 +202,10 @@ function serializeGoalFile({ id, title, priority, created, target_date, measurab
   return fm;
 }
 
-function serializeTaskFile({ id, title, priority, created, target_date, goals, contribution_summary, groups, estimated_effort, body }) {
+function serializeTaskFile({ id, title, priority, created, target_date, goals, decisions, contribution_summary, groups, estimated_effort, body }) {
   let fm = `---\nid: ${id}\ntype: task\ntitle: ${quoteYaml(title)}\npriority: ${priority}\ncreated: ${created}\n`;
   if (target_date) fm += `target_date: ${target_date}\n`;
-  fm += `status: todo\ngoals: [${(goals || []).join(', ')}]\ncontribution_summary: ${quoteYaml(contribution_summary)}\ngroups: [${(groups || []).join(', ')}]\n`;
+  fm += `status: todo\ngoals: [${(goals || []).join(', ')}]\ndecisions: [${(decisions || []).join(', ')}]\ncontribution_summary: ${quoteYaml(contribution_summary)}\ngroups: [${(groups || []).join(', ')}]\n`;
   if (estimated_effort) fm += `estimated_effort: ${quoteYaml(estimated_effort)}\n`;
   fm += `blocked_by: []\nrelated_tasks: []\n---\n`;
   if (body && body.trim()) fm += `\n${body.trim()}\n`;
@@ -375,6 +369,84 @@ function addTaskToCriterion(goalId, idx, taskId) {
   }
 }
 
+function serializeDecisionFile({ id, title, priority, created, choices, considerations, summary, why, data, groups, body }) {
+  let fm = `---\nid: ${id}\ntype: decision\ntitle: ${quoteYaml(title)}\npriority: ${priority}\ncreated: ${created}\nstatus: open\n`;
+  if (choices && choices.length) {
+    fm += `choices:\n`;
+    for (const c of choices) fm += `  - { text: ${quoteYaml(c)}, chosen: false }\n`;
+  }
+  if (considerations && considerations.length) {
+    fm += `considerations:\n`;
+    for (const c of considerations) fm += `  - ${quoteYaml(c)}\n`;
+  }
+  fm += `groups: [${(groups || []).join(', ')}]\n`;
+  if (summary) fm += `summary: ${quoteYaml(summary)}\n`;
+  if (why) fm += `why: ${quoteYaml(why)}\n`;
+  if (data) fm += `data: ${quoteYaml(data)}\n`;
+  fm += `---\n`;
+  if (body && body.trim()) fm += `\n${body.trim()}\n`;
+  return fm;
+}
+
+function selectChoice(decisionId, idx) {
+  const filepath = path.join(DECISIONS_DIR, `${decisionId}.md`);
+  if (!fs.existsSync(filepath)) throw new Error(`Decision ${decisionId} not found`);
+  const raw = fs.readFileSync(filepath, 'utf8');
+  const eol = raw.includes('\r\n') ? '\r\n' : '\n';
+  const lines = raw.split(/\r?\n/);
+  let inChoices = false, count = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^choices:\s*$/.test(line)) { inChoices = true; continue; }
+    if (inChoices) {
+      if (/^[A-Za-z_]/.test(line) || line === '---') { inChoices = false; continue; }
+      if (/^\s+-\s*\{/.test(line)) {
+        const shouldBeChosen = (count === idx);
+        lines[i] = line.replace(/chosen:\s*(true|false)/, `chosen: ${shouldBeChosen}`);
+        count++;
+      }
+    }
+  }
+  fs.writeFileSync(filepath, lines.join(eol));
+}
+
+function deleteChoice(decisionId, idx) {
+  const filepath = path.join(DECISIONS_DIR, `${decisionId}.md`);
+  if (!fs.existsSync(filepath)) throw new Error(`Decision ${decisionId} not found`);
+  const raw = fs.readFileSync(filepath, 'utf8');
+  const eol = raw.includes('\r\n') ? '\r\n' : '\n';
+  const lines = raw.split(/\r?\n/);
+  let inChoices = false, count = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^choices:\s*$/.test(line)) { inChoices = true; continue; }
+    if (inChoices) {
+      if (/^[A-Za-z_]/.test(line) || line === '---') { inChoices = false; continue; }
+      if (/^\s+-\s*\{/.test(line)) {
+        if (count === idx) { lines.splice(i, 1); fs.writeFileSync(filepath, lines.join(eol)); return; }
+        count++;
+      }
+    }
+  }
+}
+
+function deleteDecision(id) {
+  const filepath = path.join(DECISIONS_DIR, `${id}.md`);
+  if (!fs.existsSync(filepath)) throw new Error(`Decision ${id} not found`);
+  fs.unlinkSync(filepath);
+}
+
+function createDecision(data) {
+  if (!fs.existsSync(DECISIONS_DIR)) fs.mkdirSync(DECISIONS_DIR, { recursive: true });
+  const today = new Date().toISOString().slice(0, 10);
+  const slug = slugify(data.title);
+  const id = `D-${slug}`;
+  const filepath = path.join(DECISIONS_DIR, `${id}.md`);
+  if (fs.existsSync(filepath)) throw new Error(`Decision ${id} already exists — choose a different title`);
+  fs.writeFileSync(filepath, serializeDecisionFile({ ...data, id, created: today }));
+  return id;
+}
+
 function createGoal(data) {
   const today = new Date().toISOString().slice(0, 10);
   const slug = slugify(data.title);
@@ -436,8 +508,10 @@ function watchDir(dir, recursive = false) {
   fs.watch(dir, { recursive }, () => scheduleBroadcast());
 }
 
+if (!fs.existsSync(DECISIONS_DIR)) fs.mkdirSync(DECISIONS_DIR, { recursive: true });
 watchDir(GOALS_DIR);
 watchDir(TASKS_DIR);
+watchDir(DECISIONS_DIR);
 
 // ---------- HTTP server ----------
 
@@ -517,6 +591,26 @@ const server = http.createServer(async (req, res) => {
       const body = JSON.parse(await readBody(req));
       const id = createTask(body);
       return sendJson(res, 200, { ok: true, id });
+    }
+    if (u.pathname === '/api/decision/create' && req.method === 'POST') {
+      const body = JSON.parse(await readBody(req));
+      const id = createDecision(body);
+      return sendJson(res, 200, { ok: true, id });
+    }
+    if (u.pathname === '/api/decision/delete' && req.method === 'POST') {
+      const body = JSON.parse(await readBody(req));
+      deleteDecision(body.id);
+      return sendJson(res, 200, { ok: true });
+    }
+    if (u.pathname === '/api/choices/select' && req.method === 'POST') {
+      const body = JSON.parse(await readBody(req));
+      selectChoice(body.decisionId, body.idx);
+      return sendJson(res, 200, { ok: true });
+    }
+    if (u.pathname === '/api/choices/delete' && req.method === 'POST') {
+      const body = JSON.parse(await readBody(req));
+      deleteChoice(body.decisionId, body.idx);
+      return sendJson(res, 200, { ok: true });
     }
     if (u.pathname === '/api/events' && req.method === 'GET') {
       res.writeHead(200, {

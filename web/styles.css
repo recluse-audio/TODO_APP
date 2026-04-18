@@ -69,6 +69,20 @@
 .criterion input { margin-top: 3px; cursor: pointer; }
 .criterion.done span { color: rgb(100 116 139); text-decoration: line-through; }
 
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 100ms;
+}
+.choice:hover { background: rgb(30 41 59 / 0.5); }
+.choice input { margin-top: 3px; cursor: pointer; }
+.choice.chosen span { color: rgb(59 130 246); font-weight: 500; }
+.choice.unchosen span { color: rgb(100 116 139); }
+
 /* Progress bar */
 .progress-track {
   height: 4px;

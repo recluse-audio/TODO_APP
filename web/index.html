@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TODO</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body class="bg-slate-950 text-slate-100 antialiased">
@@ -13,9 +14,10 @@
       <h1 class="text-sm font-semibold tracking-wide text-slate-300">TODO</h1>
       <div id="conn-indicator" class="text-xs text-slate-500">connecting…</div>
       <div class="ml-auto flex items-center gap-2">
-        <button data-tab="hierarchy" class="tab-btn px-3 py-1 rounded text-xs font-medium">Hierarchy</button>
-        <button data-tab="groups" class="tab-btn px-3 py-1 rounded text-xs font-medium">Groups</button>
-        <button data-tab="tasks" class="tab-btn px-3 py-1 rounded text-xs font-medium">Tasks</button>
+        <button data-tab="decisions" class="tab-btn px-3 py-1 rounded text-xs font-medium">DECISIONS</button>
+        <button data-tab="hierarchy" class="tab-btn px-3 py-1 rounded text-xs font-medium">GOALS</button>
+        <button data-tab="tasks" class="tab-btn px-3 py-1 rounded text-xs font-medium">TASKS</button>
+        <button data-tab="groups" class="tab-btn px-3 py-1 rounded text-xs font-medium">GROUPS</button>
       </div>
     </header>
     <main class="flex-1 flex overflow-hidden">

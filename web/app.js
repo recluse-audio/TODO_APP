@@ -1,9 +1,10 @@
 // TODO viewer — frontend.
 
 const state = {
-  data: { goals: [], tasks: [] },
-  selected: null, // { kind: 'goal'|'task', id: '...' }
+  data: { goals: [], tasks: [], decisions: [] },
+  selected: null, // { kind: 'goal'|'task'|'decision', id: '...' }
   tab: 'hierarchy',
+  lastSelectedByTab: { hierarchy: null, tasks: null, groups: null, decisions: null },
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -28,6 +29,7 @@ const el = (tag, attrs = {}, ...children) => {
 
 const goalById = (id) => state.data.goals.find(g => g.id === id);
 const taskById = (id) => state.data.tasks.find(t => t.id === id);
+const decisionById = (id) => (state.data.decisions || []).find(d => d.id === id);
 const tasksForGoal = (gid) => state.data.tasks.filter(t => Array.isArray(t.goals) && t.goals.includes(gid));
 const byPriorityDesc = (a, b) => (b.priority ?? -Infinity) - (a.priority ?? -Infinity);
 const subGoalsOf = (gid) => state.data.goals.filter(g => g.parent_goal === gid).sort(byPriorityDesc);
@@ -36,6 +38,7 @@ const allGroups = () => {
   const s = new Set();
   for (const g of state.data.goals) for (const grp of (g.groups || [])) s.add(grp);
   for (const t of state.data.tasks) for (const grp of (t.groups || [])) s.add(grp);
+  for (const d of (state.data.decisions || [])) for (const grp of (d.groups || [])) s.add(grp);
   return Array.from(s).sort();
 };
 
@@ -62,6 +65,36 @@ async function toggleCriterion(goalId, idx) {
     // revert on error
     if (g && g.criteria && g.criteria[idx]) g.criteria[idx].done = !g.criteria[idx].done;
     render();
+  }
+}
+
+async function selectChoice(decisionId, idx) {
+  const d = decisionById(decisionId);
+  if (d && Array.isArray(d.choices)) {
+    d.choices.forEach((c, i) => { c.chosen = (i === idx); });
+  }
+  render();
+  try {
+    await api('/api/choices/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decisionId, idx }),
+    });
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function deleteChoiceItem(decisionId, idx, text) {
+  if (!confirm(`Delete choice "${text}"?`)) return;
+  try {
+    await api('/api/choices/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decisionId, idx }),
+    });
+  } catch (e) {
+    alert('Delete failed: ' + e.message);
   }
 }
 
@@ -99,12 +132,17 @@ function openModal(kind, opts = {}) {
   modalEl.classList.remove('hidden');
   const dialog = el('div', { class: 'modal-dialog' });
   const hdr = el('div', { class: 'modal-header' });
-  const title = kind === 'goal' ? 'New Goal'
-    : opts.criterionText ? `New Task → ${opts.criterionText}` : 'New Task';
+  const title = kind === 'goal' ? 'New GOAL'
+    : kind === 'decision' ? 'New DECISION'
+    : opts.criterionText ? `New TASK → ${opts.criterionText}` : 'New TASK';
   hdr.appendChild(el('h2', { class: 'text-base font-semibold text-slate-100' }, title));
   hdr.appendChild(el('button', { class: 'modal-close', type: 'button', onclick: closeModal }, '×'));
   dialog.appendChild(hdr);
-  dialog.appendChild(kind === 'goal' ? buildGoalForm() : buildTaskForm(opts));
+  dialog.appendChild(
+    kind === 'goal' ? buildGoalForm()
+    : kind === 'decision' ? buildDecisionForm()
+    : buildTaskForm(opts)
+  );
   modalEl.appendChild(dialog);
   const first = dialog.querySelector('input, textarea');
   if (first) setTimeout(() => first.focus(), 0);
@@ -204,7 +242,7 @@ async function submitGoal(form) {
       }),
     });
     closeModal();
-    state.selected = { kind: 'goal', id };
+    select('goal', id);
   } catch (e) {
     alert('Failed to create goal: ' + e.message);
   }
@@ -285,17 +323,93 @@ async function submitTask(form) {
       }),
     });
     closeModal();
-    state.selected = { kind: 'task', id };
+    select('task', id);
   } catch (e) {
     alert('Failed to create task: ' + e.message);
+  }
+}
+
+function buildDecisionForm() {
+  const form = el('form', { class: 'modal-form' });
+  form.onsubmit = (e) => { e.preventDefault(); submitDecision(form); };
+
+  const titleInput = el('input', { type: 'text', class: 'form-input', placeholder: 'e.g. Which audio engine to use' });
+  form.appendChild(formField('Title', true, titleInput));
+
+  const priInput = el('input', { type: 'number', class: 'form-input', min: '0', max: '10', placeholder: '0–10' });
+  form.appendChild(formField('Priority', false, priInput));
+
+  form.appendChild(el('div', { class: 'form-section-label' }, 'Choices'));
+  const choicesList = buildDynamicList('option being considered');
+  form.appendChild(choicesList);
+
+  form.appendChild(el('div', { class: 'form-section-label' }, 'Considerations'));
+  const considerationsList = buildDynamicList('factor to weigh');
+  form.appendChild(considerationsList);
+
+  const summaryInput = el('textarea', { class: 'form-input', rows: '2', placeholder: 'The decision made (once decided)' });
+  form.appendChild(formField('Summary', false, summaryInput));
+
+  const whyInput = el('textarea', { class: 'form-input', rows: '3', placeholder: 'Reasoning behind the decision' });
+  form.appendChild(formField('Why', false, whyInput));
+
+  const dataInput = el('textarea', { class: 'form-input', rows: '3', placeholder: 'Supporting data, notes, markdown ok' });
+  form.appendChild(formField('Data', false, dataInput));
+
+  const groupsInput = el('input', { type: 'text', class: 'form-input', placeholder: 'recluse, audio (comma-separated)', list: 'modal-groups-dl-dec' });
+  const dl = el('datalist', { id: 'modal-groups-dl-dec' });
+  for (const g of allGroups()) dl.appendChild(el('option', { value: g }));
+  form.appendChild(dl);
+  form.appendChild(formField('Groups', false, groupsInput));
+
+  const bodyInput = el('textarea', { class: 'form-input', rows: '2', placeholder: 'Optional notes or context' });
+  form.appendChild(formField('Description', false, bodyInput));
+
+  const footer = el('div', { class: 'modal-footer' });
+  footer.appendChild(el('button', { type: 'button', class: 'modal-btn-cancel', onclick: closeModal }, 'Cancel'));
+  footer.appendChild(el('button', { type: 'submit', class: 'modal-btn-primary' }, 'Create Decision'));
+  form.appendChild(footer);
+
+  form._f = { titleInput, priInput, choicesList, considerationsList, summaryInput, whyInput, dataInput, groupsInput, bodyInput };
+  return form;
+}
+
+async function submitDecision(form) {
+  const f = form._f;
+  const title = f.titleInput.value.trim();
+  const priority = f.priInput.value !== '' ? parseInt(f.priInput.value, 10) : 0;
+  if (!title) { alert('Title is required.'); return; }
+  try {
+    const { id } = await api('/api/decision/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        priority,
+        choices: f.choicesList.getValues(),
+        considerations: f.considerationsList.getValues(),
+        summary: f.summaryInput.value.trim(),
+        why: f.whyInput.value.trim(),
+        data: f.dataInput.value.trim(),
+        groups: f.groupsInput.value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
+        body: f.bodyInput.value.trim(),
+      }),
+    });
+    closeModal();
+    select('decision', id);
+  } catch (e) {
+    alert('Failed to create decision: ' + e.message);
   }
 }
 
 // ---------- delete ----------
 
 async function deleteItem(kind, id) {
-  const label = kind === 'goal' ? 'goal' : 'task';
-  if (!confirm(`Delete this ${label}? Associated ${kind === 'goal' ? 'tasks' : 'goals'} will be unlinked but not deleted.`)) return;
+  const label = kind;
+  const msg = kind === 'decision'
+    ? `Delete this decision?`
+    : `Delete this ${label}? Associated ${kind === 'goal' ? 'tasks' : 'goals'} will be unlinked but not deleted.`;
+  if (!confirm(msg)) return;
   try {
     await api(`/api/${label}/delete`, {
       method: 'POST',
@@ -327,12 +441,14 @@ function renderSidebar() {
   const sb = $('#sidebar');
   sb.innerHTML = '';
   const btns = el('div', { class: 'create-btns' });
-  btns.appendChild(el('button', { class: 'create-btn', type: 'button', onclick: () => openModal('goal') }, '+ Goal'));
-  btns.appendChild(el('button', { class: 'create-btn', type: 'button', onclick: () => openModal('task') }, '+ Task'));
+  btns.appendChild(el('button', { class: 'create-btn', type: 'button', onclick: () => openModal('decision') }, '+ DECISION'));
+  btns.appendChild(el('button', { class: 'create-btn', type: 'button', onclick: () => openModal('goal') }, '+ GOAL'));
+  btns.appendChild(el('button', { class: 'create-btn', type: 'button', onclick: () => openModal('task') }, '+ TASK'));
   sb.appendChild(btns);
   if (state.tab === 'hierarchy') renderHierarchy(sb);
   else if (state.tab === 'groups') renderGroups(sb);
   else if (state.tab === 'tasks') renderTasksList(sb);
+  else if (state.tab === 'decisions') renderDecisionsList(sb);
 }
 
 function goalSidebarItem(g) {
@@ -347,6 +463,13 @@ function taskSidebarItem(t) {
     class: 'sb-item' + (state.selected && state.selected.kind === 'task' && state.selected.id === t.id ? ' active' : ''),
     onclick: () => select('task', t.id),
   }, t.title || t.id);
+}
+
+function decisionSidebarItem(d) {
+  return el('a', {
+    class: 'sb-item' + (state.selected && state.selected.kind === 'decision' && state.selected.id === d.id ? ' active' : ''),
+    onclick: () => select('decision', d.id),
+  }, d.title || d.id);
 }
 
 function renderHierarchy(sb) {
@@ -407,16 +530,33 @@ function renderTasksList(sb) {
   }
 }
 
+function renderDecisionsList(sb) {
+  const sections = [
+    { label: 'Open',      statuses: ['open'] },
+    { label: 'Decided',   statuses: ['decided'] },
+    { label: 'Abandoned', statuses: ['abandoned'] },
+  ];
+  const decisions = state.data.decisions || [];
+  for (const sec of sections) {
+    const items = decisions
+      .filter(d => sec.statuses.includes(d.status))
+      .sort(byPriorityDesc);
+    sb.appendChild(el('div', { class: 'sb-section-title' }, sec.label));
+    for (const d of items) sb.appendChild(decisionSidebarItem(d));
+  }
+}
+
 // ---------- render: detail ----------
 
 function renderDetail() {
   const root = $('#detail');
   root.innerHTML = '';
   if (!state.selected) {
-    root.appendChild(el('div', { class: 'text-slate-500 text-sm' }, 'Select a goal or task from the sidebar.'));
+    root.appendChild(el('div', { class: 'text-slate-500 text-sm' }, 'Select a goal, task, or decision from the sidebar.'));
     return;
   }
   if (state.selected.kind === 'goal') renderGoalDetail(root, goalById(state.selected.id));
+  else if (state.selected.kind === 'decision') renderDecisionDetail(root, decisionById(state.selected.id));
   else renderTaskDetail(root, taskById(state.selected.id));
 }
 
@@ -440,6 +580,8 @@ function statusSelect(kind, current, options) {
 function renderHeader(item, kind) {
   const statuses = kind === 'goal'
     ? ['active', 'todo', 'completed', 'abandoned']
+    : kind === 'decision'
+    ? ['open', 'decided', 'abandoned']
     : ['todo', 'in_progress', 'blocked', 'done', 'abandoned'];
   const deleteBtn = el('button', { class: 'delete-btn', type: 'button', title: `Delete ${kind}` }, '🗑');
   deleteBtn.onclick = () => deleteItem(kind, item.id);
@@ -524,14 +666,25 @@ function renderGoalDetail(root, g) {
     root.appendChild(el('div', { class: 'body-md mb-8' }, ...g.why.map(line => el('p', {}, line))));
   }
 
+  if (g.data) {
+    root.appendChild(sectionTitle('Data'));
+    const dataDiv = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
+    dataDiv.innerHTML = marked.parse(g.data);
+    root.appendChild(dataDiv);
+  }
+
   if (g.body) {
     root.appendChild(sectionTitle('Description'));
-    root.appendChild(el('div', { class: 'body-md mb-8' }, ...g.body.split(/\n\n+/).map(p => el('p', {}, p))));
+    const bodyDiv = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
+    bodyDiv.innerHTML = marked.parse(g.body);
+    root.appendChild(bodyDiv);
   }
 
   if (g.conclusion) {
     root.appendChild(sectionTitle('Conclusion'));
-    root.appendChild(el('div', { class: 'body-md mb-8' }, ...g.conclusion.split(/\n\n+/).map(p => el('p', {}, p))));
+    const concDiv = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
+    concDiv.innerHTML = marked.parse(g.conclusion);
+    root.appendChild(concDiv);
   }
 
   // Cross-references
@@ -574,7 +727,9 @@ function renderTaskDetail(root, t) {
 
   if (t.body) {
     root.appendChild(sectionTitle('Description'));
-    root.appendChild(el('div', { class: 'body-md mb-8' }, ...t.body.split(/\n\n+/).map(p => el('p', {}, p))));
+    const taskBodyDiv = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
+    taskBodyDiv.innerHTML = marked.parse(t.body);
+    root.appendChild(taskBodyDiv);
   }
 
   if (Array.isArray(t.satisfies) && t.satisfies.length) {
@@ -624,6 +779,75 @@ function renderTaskDetail(root, t) {
   }
 }
 
+function renderDecisionDetail(root, d) {
+  if (!d) { root.appendChild(el('div', { class: 'text-slate-500' }, 'Decision not found.')); return; }
+  root.appendChild(renderHeader(d, 'decision'));
+
+  if (Array.isArray(d.choices) && d.choices.length) {
+    const sect = el('div', { class: 'mb-8' });
+    sect.appendChild(el('div', { class: 'flex items-center justify-between mb-2' },
+      el('h3', { class: 'text-xs uppercase tracking-wider text-slate-400 font-semibold' }, 'Choices'),
+    ));
+    const list = el('div', { class: 'space-y-1' });
+    const hasChosen = d.choices.some(c => c.chosen);
+    d.choices.forEach((c, idx) => {
+      const row = el('div', { class: 'mb-1 flex items-center gap-1' });
+      const stateClass = c.chosen ? ' chosen' : (hasChosen ? ' unchosen' : '');
+      const wrap = el('label', { class: 'choice' + stateClass + ' flex-1' });
+      const rb = el('input', { type: 'radio', name: `choices-${d.id}` });
+      rb.checked = !!c.chosen;
+      rb.onchange = () => selectChoice(d.id, idx);
+      wrap.appendChild(rb);
+      wrap.appendChild(el('span', { class: 'text-sm' }, c.text));
+      row.appendChild(wrap);
+      const delBtn = el('button', {
+        type: 'button',
+        class: 'criterion-delete-btn',
+        onclick: () => deleteChoiceItem(d.id, idx, c.text),
+      }, '×');
+      row.appendChild(delBtn);
+      list.appendChild(row);
+    });
+    sect.appendChild(list);
+    root.appendChild(sect);
+  }
+
+  if (Array.isArray(d.considerations) && d.considerations.length) {
+    root.appendChild(sectionTitle('CONSIDERATION'));
+    const ul = el('ul', { class: 'body-md mb-8 list-disc pl-5 space-y-1' });
+    for (const c of d.considerations) ul.appendChild(el('li', { class: 'text-sm text-slate-200' }, c));
+    root.appendChild(ul);
+  }
+
+  if (d.summary) {
+    root.appendChild(sectionTitle('Summary'));
+    const div = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
+    div.innerHTML = marked.parse(d.summary);
+    root.appendChild(div);
+  }
+
+  if (d.why) {
+    root.appendChild(sectionTitle('Why'));
+    const div = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
+    div.innerHTML = marked.parse(d.why);
+    root.appendChild(div);
+  }
+
+  if (d.data) {
+    root.appendChild(sectionTitle('Data'));
+    const div = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
+    div.innerHTML = marked.parse(d.data);
+    root.appendChild(div);
+  }
+
+  if (d.body) {
+    root.appendChild(sectionTitle('Description'));
+    const div = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
+    div.innerHTML = marked.parse(d.body);
+    root.appendChild(div);
+  }
+}
+
 function sectionTitle(text) {
   return el('h3', { class: 'text-xs uppercase tracking-wider text-slate-400 font-semibold mb-2' }, text);
 }
@@ -646,6 +870,9 @@ function refCard(item, kind) {
 
 function select(kind, id) {
   state.selected = { kind, id };
+  state.lastSelectedByTab[state.tab] = { kind, id };
+  localStorage.setItem('todo_selected', JSON.stringify({ kind, id }));
+  localStorage.setItem('todo_last_by_tab', JSON.stringify(state.lastSelectedByTab));
   render();
 }
 
@@ -653,7 +880,13 @@ function select(kind, id) {
 
 function setTab(tab) {
   state.tab = tab;
+  localStorage.setItem('todo_tab', tab);
   $$('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  const remembered = state.lastSelectedByTab[tab];
+  const allIds = new Set([...state.data.goals.map(g => g.id), ...state.data.tasks.map(t => t.id), ...(state.data.decisions || []).map(d => d.id)]);
+  if (remembered && allIds.has(remembered.id)) {
+    state.selected = remembered;
+  }
   render();
 }
 
@@ -669,12 +902,30 @@ function render() {
 async function bootstrap() {
   initModal();
   $$('.tab-btn').forEach(b => b.onclick = () => setTab(b.dataset.tab));
-  setTab('hierarchy');
   try {
     state.data = await api('/api/data');
-    // Default selection: first top-level goal
-    const first = topLevelGoals()[0];
-    if (first) state.selected = { kind: 'goal', id: first.id };
+    const savedLastByTab = JSON.parse(localStorage.getItem('todo_last_by_tab') || 'null');
+    if (savedLastByTab && typeof savedLastByTab === 'object') {
+      for (const k of ['hierarchy', 'tasks', 'groups', 'decisions']) {
+        if (savedLastByTab[k]) state.lastSelectedByTab[k] = savedLastByTab[k];
+      }
+    }
+    const savedTab = localStorage.getItem('todo_tab');
+    const initialTab = ['hierarchy', 'tasks', 'groups', 'decisions'].includes(savedTab) ? savedTab : 'hierarchy';
+    state.tab = initialTab;
+    $$('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === initialTab));
+
+    const allIds = new Set([...state.data.goals.map(g => g.id), ...state.data.tasks.map(t => t.id), ...(state.data.decisions || []).map(d => d.id)]);
+    const remembered = state.lastSelectedByTab[initialTab];
+    const saved = JSON.parse(localStorage.getItem('todo_selected') || 'null');
+    if (remembered && allIds.has(remembered.id)) {
+      state.selected = remembered;
+    } else if (saved && allIds.has(saved.id)) {
+      state.selected = saved;
+    } else {
+      const first = topLevelGoals()[0];
+      if (first) state.selected = { kind: 'goal', id: first.id };
+    }
     render();
   } catch (e) {
     $('#detail').textContent = 'Failed to load data: ' + e.message;
