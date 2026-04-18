@@ -220,9 +220,10 @@
 }
 .create-btn {
   flex: 1;
-  padding: 5px 8px;
+  padding: 5px 6px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 10px;
+  white-space: nowrap;
   font-weight: 500;
   background: rgb(30 41 59);
   color: rgb(148 163 184);

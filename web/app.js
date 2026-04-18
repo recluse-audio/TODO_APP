@@ -50,64 +50,538 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
-async function toggleCriterion(goalId, idx) {
-  // optimistic
-  const g = goalById(goalId);
-  if (g && g.criteria && g.criteria[idx]) g.criteria[idx].done = !g.criteria[idx].done;
-  render();
-  try {
-    await api('/api/criteria/toggle', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ goalId, idx }),
-    });
-  } catch (e) {
-    // revert on error
-    if (g && g.criteria && g.criteria[idx]) g.criteria[idx].done = !g.criteria[idx].done;
-    render();
-  }
+async function post(path, payload) {
+  return api(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
 }
 
-async function selectChoice(decisionId, idx) {
-  const d = decisionById(decisionId);
-  if (d && Array.isArray(d.choices)) {
-    d.choices.forEach((c, i) => { c.chosen = (i === idx); });
-  }
-  render();
-  try {
-    await api('/api/choices/select', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ decisionId, idx }),
-    });
-  } catch (e) {
-    console.error(e);
-  }
+async function changeStatus(kind, id, newStatus) {
+  try { await post('/api/status', { kind, id, status: newStatus }); }
+  catch (e) { console.error(e); }
 }
 
-async function deleteChoiceItem(decisionId, idx, text) {
-  if (!confirm(`Delete choice "${text}"?`)) return;
+async function deleteItem(kind, id) {
+  const msg = kind === 'decision'
+    ? `Delete this decision?`
+    : `Delete this ${kind}? Associated ${kind === 'goal' ? 'tasks' : 'goals'} will be unlinked but not deleted.`;
+  if (!confirm(msg)) return;
   try {
-    await api('/api/choices/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ decisionId, idx }),
-    });
+    await post(`/api/${kind}/delete`, { id });
+    state.selected = null;
   } catch (e) {
     alert('Delete failed: ' + e.message);
   }
 }
 
-async function changeStatus(kind, id, newStatus) {
-  try {
-    await api('/api/status', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind, id, status: newStatus }),
-    });
-  } catch (e) {
-    console.error(e);
+// ---------- view classes ----------
+
+class TodoItemView {
+  // subclass static fields: kind, statuses, createLabel
+  constructor(data) { Object.assign(this, data); }
+
+  isSelected() {
+    return state.selected && state.selected.kind === this.constructor.kind && state.selected.id === this.id;
   }
+
+  renderSidebarItem() {
+    return el('a', {
+      class: 'sb-item' + (this.isSelected() ? ' active' : ''),
+      onclick: () => select(this.constructor.kind, this.id),
+    }, this.title || this.id);
+  }
+
+  renderHeader() {
+    const kind = this.constructor.kind;
+    const statuses = this.constructor.statuses;
+    const deleteBtn = el('button', { class: 'delete-btn', type: 'button', title: `Delete ${kind}` }, '🗑');
+    deleteBtn.onclick = () => deleteItem(kind, this.id);
+    return el('div', { class: 'mb-6' },
+      el('div', { class: 'flex items-baseline gap-3 flex-wrap' },
+        el('h2', { class: 'text-2xl font-semibold tracking-tight flex-1' }, this.title || this.id),
+        el('span', { class: 'text-xs text-slate-500 font-mono' }, this.id),
+        deleteBtn,
+      ),
+      el('div', { class: 'mt-3 flex items-center gap-2 flex-wrap' },
+        badge(this.status, this.status || 'unknown'),
+        statusSelect(kind, this.status, statuses),
+        typeof this.priority === 'number' ? badge('priority', `priority ${this.priority}`) : null,
+        this.target_date ? badge('date', `target ${this.target_date}`) : null,
+        this.created ? badge('date', `created ${this.created}`) : null,
+        ...(this.groups || []).map(g => badge('group', g)),
+      ),
+    );
+  }
+
+  renderDescription(root) {
+    if (this.body) {
+      root.appendChild(sectionTitle('Description'));
+      const div = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
+      div.innerHTML = marked.parse(this.body);
+      root.appendChild(div);
+    }
+  }
+
+  renderDetail(root) {
+    root.appendChild(this.renderHeader());
+  }
+}
+
+class GoalView extends TodoItemView {
+  static kind = 'goal';
+  static statuses = ['active', 'todo', 'completed', 'abandoned'];
+
+  async toggleCriterion(idx) {
+    if (this.criteria && this.criteria[idx]) this.criteria[idx].done = !this.criteria[idx].done;
+    render();
+    try { await post('/api/criteria/toggle', { goalId: this.id, idx }); }
+    catch (e) {
+      if (this.criteria && this.criteria[idx]) this.criteria[idx].done = !this.criteria[idx].done;
+      render();
+    }
+  }
+
+  async deleteCriterion(idx, text) {
+    if (!confirm(`Delete criterion "${text}"? Linked tasks will be unlinked but not deleted.`)) return;
+    try { await post('/api/criteria/delete', { goalId: this.id, idx }); }
+    catch (e) { alert('Delete failed: ' + e.message); }
+  }
+
+  renderDetail(root) {
+    super.renderDetail(root);
+
+    if (this.measurable_outcome) {
+      root.appendChild(el('div', { class: 'mb-6 px-4 py-3 border-l-2 border-slate-700 italic text-slate-300' },
+        this.measurable_outcome));
+    }
+
+    if (Array.isArray(this.criteria) && this.criteria.length) {
+      const done = this.criteria.filter(c => c.done).length;
+      const total = this.criteria.length;
+      const sect = el('div', { class: 'mb-8' });
+      sect.appendChild(el('div', { class: 'flex items-center justify-between mb-2' },
+        el('h3', { class: 'text-xs uppercase tracking-wider text-slate-400 font-semibold' }, 'Criteria'),
+        el('div', { class: 'text-xs text-slate-400' }, `${done} / ${total}`),
+      ));
+      const list = el('div', { class: 'space-y-1' });
+      this.criteria.forEach((c, idx) => {
+        const row = el('div', { class: 'mb-2' });
+        const top = el('div', { class: 'flex items-center gap-1' });
+        const wrap = el('label', { class: 'criterion' + (c.done ? ' done' : '') + ' flex-1' });
+        const cb = el('input', { type: 'checkbox' });
+        cb.checked = !!c.done;
+        cb.onchange = () => this.toggleCriterion(idx);
+        wrap.appendChild(cb);
+        wrap.appendChild(el('span', { class: 'text-sm' }, c.text));
+        top.appendChild(wrap);
+        top.appendChild(el('button', {
+          type: 'button',
+          class: 'criterion-add-task-btn',
+          onclick: () => openModal('task', { goalId: this.id, criterionIdx: idx, criterionText: c.text }),
+        }, '+'));
+        top.appendChild(el('button', {
+          type: 'button',
+          class: 'criterion-delete-btn',
+          onclick: () => this.deleteCriterion(idx, c.text),
+        }, '×'));
+        row.appendChild(top);
+        if (Array.isArray(c.tasks) && c.tasks.length) {
+          const taskLinks = el('div', { class: 'ml-6 mt-1 flex flex-wrap gap-1' });
+          for (const tid of c.tasks) {
+            const t = taskById(tid);
+            if (!t) continue;
+            taskLinks.appendChild(el('a', {
+              class: 'criterion-task-link',
+              onclick: () => select('task', t.id),
+            }, t.title || t.id));
+          }
+          row.appendChild(taskLinks);
+        }
+        list.appendChild(row);
+      });
+      sect.appendChild(list);
+      root.appendChild(sect);
+    }
+
+    if (Array.isArray(this.why) && this.why.length) {
+      root.appendChild(sectionTitle('Why'));
+      root.appendChild(el('div', { class: 'body-md mb-8' }, ...this.why.map(line => el('p', {}, line))));
+    }
+
+    if (this.data) {
+      root.appendChild(sectionTitle('Data'));
+      const div = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
+      div.innerHTML = marked.parse(this.data);
+      root.appendChild(div);
+    }
+
+    this.renderDescription(root);
+
+    if (this.conclusion) {
+      root.appendChild(sectionTitle('Conclusion'));
+      const div = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
+      div.innerHTML = marked.parse(this.conclusion);
+      root.appendChild(div);
+    }
+
+    const refs = [];
+    if (this.parent_goal) {
+      const pg = goalById(this.parent_goal);
+      if (pg) refs.push({ label: 'Parent goal', items: [pg], kind: 'goal' });
+    }
+    const subs = subGoalsOf(this.id);
+    if (subs.length) refs.push({ label: 'Sub-goals', items: subs, kind: 'goal' });
+    const tasks = tasksForGoal(this.id);
+    if (tasks.length) refs.push({ label: 'Tasks', items: tasks, kind: 'task' });
+    if (Array.isArray(this.related_goals) && this.related_goals.length) {
+      const items = this.related_goals.map(goalById).filter(Boolean);
+      if (items.length) refs.push({ label: 'Related goals', items, kind: 'goal' });
+    }
+    renderRefs(root, refs);
+  }
+
+  static buildForm() {
+    const form = el('form', { class: 'modal-form' });
+    form.onsubmit = (e) => { e.preventDefault(); this.submitForm(form); };
+
+    const titleInput = el('input', { type: 'text', class: 'form-input', placeholder: 'e.g. Ship Pulsar v2' });
+    form.appendChild(formField('Title', true, titleInput));
+
+    const twoCol = el('div', { class: 'grid grid-cols-2 gap-3' });
+    const priInput = el('input', { type: 'number', class: 'form-input', min: '0', max: '10', placeholder: '0–10' });
+    const dateInput = el('input', { type: 'date', class: 'form-input' });
+    twoCol.appendChild(formField('Priority', false, priInput));
+    twoCol.appendChild(formField('Target Date', false, dateInput));
+    form.appendChild(twoCol);
+
+    const outcomeInput = el('textarea', { class: 'form-input', rows: '2', placeholder: 'What does done look like? Be specific and verifiable.' });
+    form.appendChild(formField('Measurable Outcome', false, outcomeInput));
+
+    form.appendChild(el('div', { class: 'form-section-label' }, 'Criteria'));
+    const critList = buildDynamicList('verifiable criterion');
+    form.appendChild(critList);
+
+    form.appendChild(el('div', { class: 'form-section-label' }, 'Why'));
+    const whyList = buildDynamicList('reason this goal matters');
+    form.appendChild(whyList);
+
+    const groupsInput = el('input', { type: 'text', class: 'form-input', placeholder: 'recluse, audio (comma-separated)', list: 'modal-groups-dl' });
+    const dl = el('datalist', { id: 'modal-groups-dl' });
+    for (const g of allGroups()) dl.appendChild(el('option', { value: g }));
+    form.appendChild(dl);
+    form.appendChild(formField('Groups', false, groupsInput));
+
+    const bodyInput = el('textarea', { class: 'form-input', rows: '2', placeholder: 'Optional notes or context' });
+    form.appendChild(formField('Description', false, bodyInput));
+
+    const footer = el('div', { class: 'modal-footer' });
+    footer.appendChild(el('button', { type: 'button', class: 'modal-btn-cancel', onclick: closeModal }, 'Cancel'));
+    footer.appendChild(el('button', { type: 'submit', class: 'modal-btn-primary' }, 'Create Goal'));
+    form.appendChild(footer);
+
+    form._f = { titleInput, priInput, dateInput, outcomeInput, critList, whyList, groupsInput, bodyInput };
+    return form;
+  }
+
+  static async submitForm(form) {
+    const f = form._f;
+    const title = f.titleInput.value.trim();
+    if (!title) { alert('Title is required.'); return; }
+    try {
+      const { id } = await post('/api/goal/create', {
+        title,
+        priority: f.priInput.value !== '' ? parseInt(f.priInput.value, 10) : 0,
+        measurable_outcome: f.outcomeInput.value.trim(),
+        target_date: f.dateInput.value || null,
+        criteria: f.critList.getValues(),
+        why: f.whyList.getValues(),
+        groups: f.groupsInput.value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
+        body: f.bodyInput.value.trim(),
+      });
+      closeModal();
+      select('goal', id);
+    } catch (e) {
+      alert('Failed to create goal: ' + e.message);
+    }
+  }
+}
+
+class TaskView extends TodoItemView {
+  static kind = 'task';
+  static statuses = ['todo', 'in_progress', 'blocked', 'done', 'abandoned'];
+
+  renderDetail(root) {
+    super.renderDetail(root);
+
+    if (this.contribution_summary) {
+      root.appendChild(el('div', { class: 'mb-6 px-4 py-3 border-l-2 border-slate-700 italic text-slate-300' },
+        this.contribution_summary));
+    }
+
+    if (this.estimated_effort) {
+      root.appendChild(el('div', { class: 'mb-4 text-xs text-slate-400' }, `Estimated effort: ${this.estimated_effort}`));
+    }
+
+    this.renderDescription(root);
+
+    if (Array.isArray(this.satisfies) && this.satisfies.length) {
+      root.appendChild(sectionTitle('Satisfies criteria'));
+      const box = el('div', { class: 'space-y-1 mb-6' });
+      for (const s of this.satisfies) {
+        const g = goalById(s.goal);
+        if (!g) continue;
+        const idx = typeof s.criterion === 'number' ? s.criterion : parseInt(s.criterion, 10);
+        const crit = Array.isArray(g.criteria) && g.criteria[idx];
+        const line = el('a', {
+          class: 'satisfies-link',
+          onclick: () => select('goal', g.id),
+        });
+        line.appendChild(el('span', { class: 'text-xs text-slate-500 font-mono mr-2' }, `${g.id}#${idx}`));
+        line.appendChild(el('span', { class: 'text-sm text-slate-200' }, crit ? crit.text : '(unknown criterion)'));
+        box.appendChild(line);
+      }
+      root.appendChild(box);
+    }
+
+    const refs = [];
+    if (Array.isArray(this.goals) && this.goals.length) {
+      refs.push({ label: 'Advances goals', items: this.goals.map(goalById).filter(Boolean), kind: 'goal' });
+    } else {
+      refs.push({ label: 'Advances goals', items: [], kind: 'goal', empty: '(orphan task — no goal)' });
+    }
+    if (Array.isArray(this.blocked_by) && this.blocked_by.length) {
+      refs.push({ label: 'Blocked by', items: this.blocked_by.map(taskById).filter(Boolean), kind: 'task' });
+    }
+    if (Array.isArray(this.related_tasks) && this.related_tasks.length) {
+      refs.push({ label: 'Related tasks', items: this.related_tasks.map(taskById).filter(Boolean), kind: 'task' });
+    }
+    renderRefs(root, refs);
+  }
+
+  static buildForm(opts = {}) {
+    const form = el('form', { class: 'modal-form' });
+    form.onsubmit = (e) => { e.preventDefault(); this.submitForm(form); };
+    form._satisfies = (opts.goalId != null && opts.criterionIdx != null)
+      ? { goal: opts.goalId, criterion: opts.criterionIdx } : null;
+
+    const titleInput = el('input', { type: 'text', class: 'form-input', placeholder: 'e.g. Add unit tests for Pulsar' });
+    form.appendChild(formField('Title', true, titleInput));
+
+    const threeCol = el('div', { class: 'grid grid-cols-3 gap-3' });
+    const priInput = el('input', { type: 'number', class: 'form-input', min: '0', max: '10', placeholder: '0–10' });
+    const effortInput = el('input', { type: 'text', class: 'form-input', placeholder: 'e.g. 2h, 1d' });
+    const dateInput = el('input', { type: 'date', class: 'form-input' });
+    threeCol.appendChild(formField('Priority', false, priInput));
+    threeCol.appendChild(formField('Est. Effort', false, effortInput));
+    threeCol.appendChild(formField('Target Date', false, dateInput));
+    form.appendChild(threeCol);
+
+    const summaryInput = el('textarea', { class: 'form-input', rows: '2', placeholder: 'How does this task advance the selected goals?' });
+    form.appendChild(formField('Contribution Summary', false, summaryInput));
+
+    form.appendChild(el('div', { class: 'form-section-label' }, 'Goals'));
+    const goalsBox = el('div', { class: 'goals-checklist' });
+    for (const g of state.data.goals.filter(g => g.status === 'active').sort(byPriorityDesc)) {
+      const row = el('label', { class: 'goals-check-row' });
+      const locked = opts.goalId === g.id;
+      const cb = el('input', { type: 'checkbox', value: g.id });
+      if (locked) { cb.checked = true; cb.disabled = true; }
+      row.appendChild(cb);
+      row.appendChild(el('span', { class: 'text-xs text-slate-500 font-mono mr-2' }, `p${g.priority}`));
+      row.appendChild(el('span', { class: 'text-sm' + (locked ? ' text-blue-300 font-medium' : ' text-slate-200') }, g.title || g.id));
+      goalsBox.appendChild(row);
+    }
+    form.appendChild(goalsBox);
+
+    const linkedGoal = opts.goalId ? goalById(opts.goalId) : null;
+    const inheritedGroups = linkedGoal && Array.isArray(linkedGoal.groups) ? linkedGoal.groups.join(', ') : '';
+    const groupsInput = el('input', { type: 'text', class: 'form-input', placeholder: 'recluse, audio (comma-separated)', list: 'modal-groups-dl-task' });
+    groupsInput.value = inheritedGroups;
+    const dl = el('datalist', { id: 'modal-groups-dl-task' });
+    for (const g of allGroups()) dl.appendChild(el('option', { value: g }));
+    form.appendChild(dl);
+    form.appendChild(formField('Groups', false, groupsInput));
+
+    const footer = el('div', { class: 'modal-footer' });
+    footer.appendChild(el('button', { type: 'button', class: 'modal-btn-cancel', onclick: closeModal }, 'Cancel'));
+    footer.appendChild(el('button', { type: 'submit', class: 'modal-btn-primary' }, 'Create Task'));
+    form.appendChild(footer);
+
+    form._f = { titleInput, priInput, effortInput, dateInput, summaryInput, goalsBox, groupsInput };
+    return form;
+  }
+
+  static async submitForm(form) {
+    const f = form._f;
+    const title = f.titleInput.value.trim();
+    if (!title) { alert('Title is required.'); return; }
+    try {
+      const { id } = await post('/api/task/create', {
+        title,
+        priority: f.priInput.value !== '' ? parseInt(f.priInput.value, 10) : 0,
+        contribution_summary: f.summaryInput.value.trim(),
+        target_date: f.dateInput.value || null,
+        estimated_effort: f.effortInput.value.trim() || null,
+        goals: Array.from(f.goalsBox.querySelectorAll('input:checked')).map(cb => cb.value),
+        groups: f.groupsInput.value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
+        satisfies: form._satisfies ? [form._satisfies] : [],
+      });
+      closeModal();
+      select('task', id);
+    } catch (e) {
+      alert('Failed to create task: ' + e.message);
+    }
+  }
+}
+
+class DecisionView extends TodoItemView {
+  static kind = 'decision';
+  static statuses = ['open', 'decided', 'abandoned'];
+
+  async selectChoice(idx) {
+    if (Array.isArray(this.choices)) {
+      this.choices.forEach((c, i) => { c.chosen = (i === idx); });
+    }
+    render();
+    try { await post('/api/choices/select', { decisionId: this.id, idx }); }
+    catch (e) { console.error(e); }
+  }
+
+  async deleteChoice(idx, text) {
+    if (!confirm(`Delete choice "${text}"?`)) return;
+    try { await post('/api/choices/delete', { decisionId: this.id, idx }); }
+    catch (e) { alert('Delete failed: ' + e.message); }
+  }
+
+  renderDetail(root) {
+    super.renderDetail(root);
+
+    if (Array.isArray(this.choices) && this.choices.length) {
+      const sect = el('div', { class: 'mb-8' });
+      sect.appendChild(el('div', { class: 'flex items-center justify-between mb-2' },
+        el('h3', { class: 'text-xs uppercase tracking-wider text-slate-400 font-semibold' }, 'Choices'),
+      ));
+      const list = el('div', { class: 'space-y-1' });
+      const hasChosen = this.choices.some(c => c.chosen);
+      this.choices.forEach((c, idx) => {
+        const row = el('div', { class: 'mb-1 flex items-center gap-1' });
+        const stateClass = c.chosen ? ' chosen' : (hasChosen ? ' unchosen' : '');
+        const wrap = el('label', { class: 'choice' + stateClass + ' flex-1' });
+        const rb = el('input', { type: 'radio', name: `choices-${this.id}` });
+        rb.checked = !!c.chosen;
+        rb.onchange = () => this.selectChoice(idx);
+        wrap.appendChild(rb);
+        wrap.appendChild(el('span', { class: 'text-sm' }, c.text));
+        row.appendChild(wrap);
+        row.appendChild(el('button', {
+          type: 'button',
+          class: 'criterion-delete-btn',
+          onclick: () => this.deleteChoice(idx, c.text),
+        }, '×'));
+        list.appendChild(row);
+      });
+      sect.appendChild(list);
+      root.appendChild(sect);
+    }
+
+    if (Array.isArray(this.considerations) && this.considerations.length) {
+      root.appendChild(sectionTitle('CONSIDERATION'));
+      const ul = el('ul', { class: 'body-md mb-8 list-disc pl-5 space-y-1' });
+      for (const c of this.considerations) ul.appendChild(el('li', { class: 'text-sm text-slate-200' }, c));
+      root.appendChild(ul);
+    }
+
+    for (const [field, label] of [['summary', 'Summary'], ['why', 'Why'], ['data', 'Data']]) {
+      if (this[field]) {
+        root.appendChild(sectionTitle(label));
+        const div = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
+        div.innerHTML = marked.parse(this[field]);
+        root.appendChild(div);
+      }
+    }
+
+    this.renderDescription(root);
+  }
+
+  static buildForm() {
+    const form = el('form', { class: 'modal-form' });
+    form.onsubmit = (e) => { e.preventDefault(); this.submitForm(form); };
+
+    const titleInput = el('input', { type: 'text', class: 'form-input', placeholder: 'e.g. Which audio engine to use' });
+    form.appendChild(formField('Title', true, titleInput));
+
+    const priInput = el('input', { type: 'number', class: 'form-input', min: '0', max: '10', placeholder: '0–10' });
+    form.appendChild(formField('Priority', false, priInput));
+
+    form.appendChild(el('div', { class: 'form-section-label' }, 'Choices'));
+    const choicesList = buildDynamicList('option being considered');
+    form.appendChild(choicesList);
+
+    form.appendChild(el('div', { class: 'form-section-label' }, 'Considerations'));
+    const considerationsList = buildDynamicList('factor to weigh');
+    form.appendChild(considerationsList);
+
+    const summaryInput = el('textarea', { class: 'form-input', rows: '2', placeholder: 'The decision made (once decided)' });
+    form.appendChild(formField('Summary', false, summaryInput));
+
+    const whyInput = el('textarea', { class: 'form-input', rows: '3', placeholder: 'Reasoning behind the decision' });
+    form.appendChild(formField('Why', false, whyInput));
+
+    const dataInput = el('textarea', { class: 'form-input', rows: '3', placeholder: 'Supporting data, notes, markdown ok' });
+    form.appendChild(formField('Data', false, dataInput));
+
+    const groupsInput = el('input', { type: 'text', class: 'form-input', placeholder: 'recluse, audio (comma-separated)', list: 'modal-groups-dl-dec' });
+    const dl = el('datalist', { id: 'modal-groups-dl-dec' });
+    for (const g of allGroups()) dl.appendChild(el('option', { value: g }));
+    form.appendChild(dl);
+    form.appendChild(formField('Groups', false, groupsInput));
+
+    const bodyInput = el('textarea', { class: 'form-input', rows: '2', placeholder: 'Optional notes or context' });
+    form.appendChild(formField('Description', false, bodyInput));
+
+    const footer = el('div', { class: 'modal-footer' });
+    footer.appendChild(el('button', { type: 'button', class: 'modal-btn-cancel', onclick: closeModal }, 'Cancel'));
+    footer.appendChild(el('button', { type: 'submit', class: 'modal-btn-primary' }, 'Create Decision'));
+    form.appendChild(footer);
+
+    form._f = { titleInput, priInput, choicesList, considerationsList, summaryInput, whyInput, dataInput, groupsInput, bodyInput };
+    return form;
+  }
+
+  static async submitForm(form) {
+    const f = form._f;
+    const title = f.titleInput.value.trim();
+    if (!title) { alert('Title is required.'); return; }
+    try {
+      const { id } = await post('/api/decision/create', {
+        title,
+        priority: f.priInput.value !== '' ? parseInt(f.priInput.value, 10) : 0,
+        choices: f.choicesList.getValues(),
+        considerations: f.considerationsList.getValues(),
+        summary: f.summaryInput.value.trim(),
+        why: f.whyInput.value.trim(),
+        data: f.dataInput.value.trim(),
+        groups: f.groupsInput.value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
+        body: f.bodyInput.value.trim(),
+      });
+      closeModal();
+      select('decision', id);
+    } catch (e) {
+      alert('Failed to create decision: ' + e.message);
+    }
+  }
+}
+
+const VIEW_CLASSES = { goal: GoalView, task: TaskView, decision: DecisionView };
+
+function wrapSnapshot(raw) {
+  return {
+    goals: (raw.goals || []).map(g => new GoalView(g)),
+    tasks: (raw.tasks || []).map(t => new TaskView(t)),
+    decisions: (raw.decisions || []).map(d => new DecisionView(d)),
+  };
 }
 
 // ---------- modal ----------
@@ -138,11 +612,7 @@ function openModal(kind, opts = {}) {
   hdr.appendChild(el('h2', { class: 'text-base font-semibold text-slate-100' }, title));
   hdr.appendChild(el('button', { class: 'modal-close', type: 'button', onclick: closeModal }, '×'));
   dialog.appendChild(hdr);
-  dialog.appendChild(
-    kind === 'goal' ? buildGoalForm()
-    : kind === 'decision' ? buildDecisionForm()
-    : buildTaskForm(opts)
-  );
+  dialog.appendChild(VIEW_CLASSES[kind].buildForm(opts));
   modalEl.appendChild(dialog);
   const first = dialog.querySelector('input, textarea');
   if (first) setTimeout(() => first.focus(), 0);
@@ -177,264 +647,6 @@ function buildDynamicList(placeholder) {
   return wrap;
 }
 
-function buildGoalForm() {
-  const form = el('form', { class: 'modal-form' });
-  form.onsubmit = (e) => { e.preventDefault(); submitGoal(form); };
-
-  const titleInput = el('input', { type: 'text', class: 'form-input', placeholder: 'e.g. Ship Pulsar v2' });
-  form.appendChild(formField('Title', true, titleInput));
-
-  const twoCol = el('div', { class: 'grid grid-cols-2 gap-3' });
-  const priInput = el('input', { type: 'number', class: 'form-input', min: '0', max: '10', placeholder: '0–10' });
-  const dateInput = el('input', { type: 'date', class: 'form-input' });
-  twoCol.appendChild(formField('Priority', false, priInput));
-  twoCol.appendChild(formField('Target Date', false, dateInput));
-  form.appendChild(twoCol);
-
-  const outcomeInput = el('textarea', { class: 'form-input', rows: '2', placeholder: 'What does done look like? Be specific and verifiable.' });
-  form.appendChild(formField('Measurable Outcome', false, outcomeInput));
-
-  form.appendChild(el('div', { class: 'form-section-label' }, 'Criteria'));
-  const critList = buildDynamicList('verifiable criterion');
-  form.appendChild(critList);
-
-  form.appendChild(el('div', { class: 'form-section-label' }, 'Why'));
-  const whyList = buildDynamicList('reason this goal matters');
-  form.appendChild(whyList);
-
-  const groupsInput = el('input', { type: 'text', class: 'form-input', placeholder: 'recluse, audio (comma-separated)', list: 'modal-groups-dl' });
-  const dl = el('datalist', { id: 'modal-groups-dl' });
-  for (const g of allGroups()) dl.appendChild(el('option', { value: g }));
-  form.appendChild(dl);
-  form.appendChild(formField('Groups', false, groupsInput));
-
-  const bodyInput = el('textarea', { class: 'form-input', rows: '2', placeholder: 'Optional notes or context' });
-  form.appendChild(formField('Description', false, bodyInput));
-
-  const footer = el('div', { class: 'modal-footer' });
-  footer.appendChild(el('button', { type: 'button', class: 'modal-btn-cancel', onclick: closeModal }, 'Cancel'));
-  footer.appendChild(el('button', { type: 'submit', class: 'modal-btn-primary' }, 'Create Goal'));
-  form.appendChild(footer);
-
-  form._f = { titleInput, priInput, dateInput, outcomeInput, critList, whyList, groupsInput, bodyInput };
-  return form;
-}
-
-async function submitGoal(form) {
-  const f = form._f;
-  const title = f.titleInput.value.trim();
-  const priority = f.priInput.value !== '' ? parseInt(f.priInput.value, 10) : 0;
-  const measurable_outcome = f.outcomeInput.value.trim();
-  if (!title) { alert('Title is required.'); return; }
-  try {
-    const { id } = await api('/api/goal/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title,
-        priority,
-        measurable_outcome,
-        target_date: f.dateInput.value || null,
-        criteria: f.critList.getValues(),
-        why: f.whyList.getValues(),
-        groups: f.groupsInput.value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
-        body: f.bodyInput.value.trim(),
-      }),
-    });
-    closeModal();
-    select('goal', id);
-  } catch (e) {
-    alert('Failed to create goal: ' + e.message);
-  }
-}
-
-function buildTaskForm(opts = {}) {
-  const form = el('form', { class: 'modal-form' });
-  form.onsubmit = (e) => { e.preventDefault(); submitTask(form); };
-  form._satisfies = (opts.goalId != null && opts.criterionIdx != null)
-    ? { goal: opts.goalId, criterion: opts.criterionIdx } : null;
-
-  const titleInput = el('input', { type: 'text', class: 'form-input', placeholder: 'e.g. Add unit tests for Pulsar' });
-  form.appendChild(formField('Title', true, titleInput));
-
-  const threeCol = el('div', { class: 'grid grid-cols-3 gap-3' });
-  const priInput = el('input', { type: 'number', class: 'form-input', min: '0', max: '10', placeholder: '0–10' });
-  const effortInput = el('input', { type: 'text', class: 'form-input', placeholder: 'e.g. 2h, 1d' });
-  const dateInput = el('input', { type: 'date', class: 'form-input' });
-  threeCol.appendChild(formField('Priority', false, priInput));
-  threeCol.appendChild(formField('Est. Effort', false, effortInput));
-  threeCol.appendChild(formField('Target Date', false, dateInput));
-  form.appendChild(threeCol);
-
-  const summaryInput = el('textarea', { class: 'form-input', rows: '2', placeholder: 'How does this task advance the selected goals?' });
-  form.appendChild(formField('Contribution Summary', false, summaryInput));
-
-  form.appendChild(el('div', { class: 'form-section-label' }, 'Goals'));
-  const goalsBox = el('div', { class: 'goals-checklist' });
-  for (const g of state.data.goals.filter(g => g.status === 'active').sort(byPriorityDesc)) {
-    const row = el('label', { class: 'goals-check-row' });
-    const locked = opts.goalId === g.id;
-    const cb = el('input', { type: 'checkbox', value: g.id });
-    if (locked) { cb.checked = true; cb.disabled = true; }
-    row.appendChild(cb);
-    row.appendChild(el('span', { class: 'text-xs text-slate-500 font-mono mr-2' }, `p${g.priority}`));
-    row.appendChild(el('span', { class: 'text-sm' + (locked ? ' text-blue-300 font-medium' : ' text-slate-200') }, g.title || g.id));
-    goalsBox.appendChild(row);
-  }
-  form.appendChild(goalsBox);
-
-  const linkedGoal = opts.goalId ? goalById(opts.goalId) : null;
-  const inheritedGroups = linkedGoal && Array.isArray(linkedGoal.groups) ? linkedGoal.groups.join(', ') : '';
-  const groupsInput = el('input', { type: 'text', class: 'form-input', placeholder: 'recluse, audio (comma-separated)', list: 'modal-groups-dl-task' });
-  groupsInput.value = inheritedGroups;
-  const dl = el('datalist', { id: 'modal-groups-dl-task' });
-  for (const g of allGroups()) dl.appendChild(el('option', { value: g }));
-  form.appendChild(dl);
-  form.appendChild(formField('Groups', false, groupsInput));
-
-  const footer = el('div', { class: 'modal-footer' });
-  footer.appendChild(el('button', { type: 'button', class: 'modal-btn-cancel', onclick: closeModal }, 'Cancel'));
-  footer.appendChild(el('button', { type: 'submit', class: 'modal-btn-primary' }, 'Create Task'));
-  form.appendChild(footer);
-
-  form._f = { titleInput, priInput, effortInput, dateInput, summaryInput, goalsBox, groupsInput };
-  return form;
-}
-
-async function submitTask(form) {
-  const f = form._f;
-  const title = f.titleInput.value.trim();
-  const priority = f.priInput.value !== '' ? parseInt(f.priInput.value, 10) : 0;
-  const contribution_summary = f.summaryInput.value.trim();
-  if (!title) { alert('Title is required.'); return; }
-  try {
-    const { id } = await api('/api/task/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title,
-        priority,
-        contribution_summary,
-        target_date: f.dateInput.value || null,
-        estimated_effort: f.effortInput.value.trim() || null,
-        goals: Array.from(f.goalsBox.querySelectorAll('input:checked')).map(cb => cb.value),
-        groups: f.groupsInput.value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
-        satisfies: form._satisfies ? [form._satisfies] : [],
-      }),
-    });
-    closeModal();
-    select('task', id);
-  } catch (e) {
-    alert('Failed to create task: ' + e.message);
-  }
-}
-
-function buildDecisionForm() {
-  const form = el('form', { class: 'modal-form' });
-  form.onsubmit = (e) => { e.preventDefault(); submitDecision(form); };
-
-  const titleInput = el('input', { type: 'text', class: 'form-input', placeholder: 'e.g. Which audio engine to use' });
-  form.appendChild(formField('Title', true, titleInput));
-
-  const priInput = el('input', { type: 'number', class: 'form-input', min: '0', max: '10', placeholder: '0–10' });
-  form.appendChild(formField('Priority', false, priInput));
-
-  form.appendChild(el('div', { class: 'form-section-label' }, 'Choices'));
-  const choicesList = buildDynamicList('option being considered');
-  form.appendChild(choicesList);
-
-  form.appendChild(el('div', { class: 'form-section-label' }, 'Considerations'));
-  const considerationsList = buildDynamicList('factor to weigh');
-  form.appendChild(considerationsList);
-
-  const summaryInput = el('textarea', { class: 'form-input', rows: '2', placeholder: 'The decision made (once decided)' });
-  form.appendChild(formField('Summary', false, summaryInput));
-
-  const whyInput = el('textarea', { class: 'form-input', rows: '3', placeholder: 'Reasoning behind the decision' });
-  form.appendChild(formField('Why', false, whyInput));
-
-  const dataInput = el('textarea', { class: 'form-input', rows: '3', placeholder: 'Supporting data, notes, markdown ok' });
-  form.appendChild(formField('Data', false, dataInput));
-
-  const groupsInput = el('input', { type: 'text', class: 'form-input', placeholder: 'recluse, audio (comma-separated)', list: 'modal-groups-dl-dec' });
-  const dl = el('datalist', { id: 'modal-groups-dl-dec' });
-  for (const g of allGroups()) dl.appendChild(el('option', { value: g }));
-  form.appendChild(dl);
-  form.appendChild(formField('Groups', false, groupsInput));
-
-  const bodyInput = el('textarea', { class: 'form-input', rows: '2', placeholder: 'Optional notes or context' });
-  form.appendChild(formField('Description', false, bodyInput));
-
-  const footer = el('div', { class: 'modal-footer' });
-  footer.appendChild(el('button', { type: 'button', class: 'modal-btn-cancel', onclick: closeModal }, 'Cancel'));
-  footer.appendChild(el('button', { type: 'submit', class: 'modal-btn-primary' }, 'Create Decision'));
-  form.appendChild(footer);
-
-  form._f = { titleInput, priInput, choicesList, considerationsList, summaryInput, whyInput, dataInput, groupsInput, bodyInput };
-  return form;
-}
-
-async function submitDecision(form) {
-  const f = form._f;
-  const title = f.titleInput.value.trim();
-  const priority = f.priInput.value !== '' ? parseInt(f.priInput.value, 10) : 0;
-  if (!title) { alert('Title is required.'); return; }
-  try {
-    const { id } = await api('/api/decision/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title,
-        priority,
-        choices: f.choicesList.getValues(),
-        considerations: f.considerationsList.getValues(),
-        summary: f.summaryInput.value.trim(),
-        why: f.whyInput.value.trim(),
-        data: f.dataInput.value.trim(),
-        groups: f.groupsInput.value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
-        body: f.bodyInput.value.trim(),
-      }),
-    });
-    closeModal();
-    select('decision', id);
-  } catch (e) {
-    alert('Failed to create decision: ' + e.message);
-  }
-}
-
-// ---------- delete ----------
-
-async function deleteItem(kind, id) {
-  const label = kind;
-  const msg = kind === 'decision'
-    ? `Delete this decision?`
-    : `Delete this ${label}? Associated ${kind === 'goal' ? 'tasks' : 'goals'} will be unlinked but not deleted.`;
-  if (!confirm(msg)) return;
-  try {
-    await api(`/api/${label}/delete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
-    });
-    state.selected = null;
-  } catch (e) {
-    alert('Delete failed: ' + e.message);
-  }
-}
-
-async function deleteCriterionItem(goalId, idx, text) {
-  if (!confirm(`Delete criterion "${text}"? Linked tasks will be unlinked but not deleted.`)) return;
-  try {
-    await api('/api/criteria/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ goalId, idx }),
-    });
-  } catch (e) {
-    alert('Delete failed: ' + e.message);
-  }
-}
-
 // ---------- render: sidebar ----------
 
 function renderSidebar() {
@@ -451,27 +663,6 @@ function renderSidebar() {
   else if (state.tab === 'decisions') renderDecisionsList(sb);
 }
 
-function goalSidebarItem(g) {
-  return el('a', {
-    class: 'sb-item' + (state.selected && state.selected.kind === 'goal' && state.selected.id === g.id ? ' active' : ''),
-    onclick: () => select('goal', g.id),
-  }, g.title || g.id);
-}
-
-function taskSidebarItem(t) {
-  return el('a', {
-    class: 'sb-item' + (state.selected && state.selected.kind === 'task' && state.selected.id === t.id ? ' active' : ''),
-    onclick: () => select('task', t.id),
-  }, t.title || t.id);
-}
-
-function decisionSidebarItem(d) {
-  return el('a', {
-    class: 'sb-item' + (state.selected && state.selected.kind === 'decision' && state.selected.id === d.id ? ' active' : ''),
-    onclick: () => select('decision', d.id),
-  }, d.title || d.id);
-}
-
 function renderHierarchy(sb) {
   const sections = [
     { label: 'Active', statuses: ['active'] },
@@ -480,7 +671,7 @@ function renderHierarchy(sb) {
     { label: 'Abandoned', statuses: ['abandoned'] },
   ];
   const renderNode = (g) => {
-    const node = el('div', {}, goalSidebarItem(g));
+    const node = el('div', {}, g.renderSidebarItem());
     const subs = subGoalsOf(g.id);
     if (subs.length) {
       const wrap = el('div', { class: 'tree-children' });
@@ -499,51 +690,46 @@ function renderHierarchy(sb) {
 }
 
 function renderGroups(sb) {
-  const groups = allGroups();
-  for (const grp of groups) {
+  const all = [...state.data.goals, ...state.data.tasks, ...(state.data.decisions || [])];
+  const inGroup = (item, grp) => Array.isArray(item.groups) && item.groups.includes(grp);
+  const ungrouped = (item) => !item.groups || item.groups.length === 0;
+  for (const grp of allGroups()) {
     sb.appendChild(el('div', { class: 'sb-section-title' }, grp));
-    for (const g of state.data.goals.filter(x => (x.groups || []).includes(grp)).sort(byPriorityDesc)) {
-      sb.appendChild(goalSidebarItem(g));
+    for (const i of all.filter(x => inGroup(x, grp)).sort(byPriorityDesc)) {
+      sb.appendChild(i.renderSidebarItem());
     }
   }
-  const ungrouped = state.data.goals.filter(g => !g.groups || g.groups.length === 0).sort(byPriorityDesc);
-  if (ungrouped.length) {
+  const missing = all.filter(ungrouped).sort(byPriorityDesc);
+  if (missing.length) {
     sb.appendChild(el('div', { class: 'sb-section-title' }, '(ungrouped)'));
-    for (const g of ungrouped) sb.appendChild(goalSidebarItem(g));
+    for (const i of missing) sb.appendChild(i.renderSidebarItem());
+  }
+}
+
+function renderStatusSections(sb, items, sections) {
+  for (const sec of sections) {
+    const picked = items.filter(i => sec.statuses.includes(i.status)).sort(byPriorityDesc);
+    sb.appendChild(el('div', { class: 'sb-section-title' }, sec.label));
+    for (const i of picked) sb.appendChild(i.renderSidebarItem());
   }
 }
 
 function renderTasksList(sb) {
-  const sections = [
+  renderStatusSections(sb, state.data.tasks, [
     { label: 'In Progress', statuses: ['in_progress'] },
     { label: 'Blocked',     statuses: ['blocked'] },
     { label: 'Todo',        statuses: ['todo'] },
     { label: 'Done',        statuses: ['done'] },
     { label: 'Abandoned',   statuses: ['abandoned'] },
-  ];
-  for (const sec of sections) {
-    const tasks = state.data.tasks
-      .filter(t => sec.statuses.includes(t.status))
-      .sort(byPriorityDesc);
-    sb.appendChild(el('div', { class: 'sb-section-title' }, sec.label));
-    for (const t of tasks) sb.appendChild(taskSidebarItem(t));
-  }
+  ]);
 }
 
 function renderDecisionsList(sb) {
-  const sections = [
+  renderStatusSections(sb, state.data.decisions || [], [
     { label: 'Open',      statuses: ['open'] },
     { label: 'Decided',   statuses: ['decided'] },
     { label: 'Abandoned', statuses: ['abandoned'] },
-  ];
-  const decisions = state.data.decisions || [];
-  for (const sec of sections) {
-    const items = decisions
-      .filter(d => sec.statuses.includes(d.status))
-      .sort(byPriorityDesc);
-    sb.appendChild(el('div', { class: 'sb-section-title' }, sec.label));
-    for (const d of items) sb.appendChild(decisionSidebarItem(d));
-  }
+  ]);
 }
 
 // ---------- render: detail ----------
@@ -555,9 +741,10 @@ function renderDetail() {
     root.appendChild(el('div', { class: 'text-slate-500 text-sm' }, 'Select a goal, task, or decision from the sidebar.'));
     return;
   }
-  if (state.selected.kind === 'goal') renderGoalDetail(root, goalById(state.selected.id));
-  else if (state.selected.kind === 'decision') renderDecisionDetail(root, decisionById(state.selected.id));
-  else renderTaskDetail(root, taskById(state.selected.id));
+  const { kind, id } = state.selected;
+  const item = kind === 'goal' ? goalById(id) : kind === 'task' ? taskById(id) : decisionById(id);
+  if (!item) { root.appendChild(el('div', { class: 'text-slate-500' }, `${kind} not found.`)); return; }
+  item.renderDetail(root);
 }
 
 function badge(kind, text) {
@@ -577,281 +764,9 @@ function statusSelect(kind, current, options) {
   return sel;
 }
 
-function renderHeader(item, kind) {
-  const statuses = kind === 'goal'
-    ? ['active', 'todo', 'completed', 'abandoned']
-    : kind === 'decision'
-    ? ['open', 'decided', 'abandoned']
-    : ['todo', 'in_progress', 'blocked', 'done', 'abandoned'];
-  const deleteBtn = el('button', { class: 'delete-btn', type: 'button', title: `Delete ${kind}` }, '🗑');
-  deleteBtn.onclick = () => deleteItem(kind, item.id);
-  return el('div', { class: 'mb-6' },
-    el('div', { class: 'flex items-baseline gap-3 flex-wrap' },
-      el('h2', { class: 'text-2xl font-semibold tracking-tight flex-1' }, item.title || item.id),
-      el('span', { class: 'text-xs text-slate-500 font-mono' }, item.id),
-      deleteBtn,
-    ),
-    el('div', { class: 'mt-3 flex items-center gap-2 flex-wrap' },
-      badge(item.status, item.status || 'unknown'),
-      statusSelect(kind, item.status, statuses),
-      typeof item.priority === 'number' ? badge('priority', `priority ${item.priority}`) : null,
-      item.target_date ? badge('date', `target ${item.target_date}`) : null,
-      item.created ? badge('date', `created ${item.created}`) : null,
-      ...(item.groups || []).map(g => badge('group', g)),
-    ),
-  );
-}
-
-function renderGoalDetail(root, g) {
-  if (!g) { root.appendChild(el('div', { class: 'text-slate-500' }, 'Goal not found.')); return; }
-  root.appendChild(renderHeader(g, 'goal'));
-
-  if (g.measurable_outcome) {
-    root.appendChild(el('div', { class: 'mb-6 px-4 py-3 border-l-2 border-slate-700 italic text-slate-300' },
-      g.measurable_outcome));
-  }
-
-  if (Array.isArray(g.criteria) && g.criteria.length) {
-    const done = g.criteria.filter(c => c.done).length;
-    const total = g.criteria.length;
-    const sect = el('div', { class: 'mb-8' });
-    sect.appendChild(el('div', { class: 'flex items-center justify-between mb-2' },
-      el('h3', { class: 'text-xs uppercase tracking-wider text-slate-400 font-semibold' }, 'Criteria'),
-      el('div', { class: 'text-xs text-slate-400' }, `${done} / ${total}`),
-    ));
-    const list = el('div', { class: 'space-y-1' });
-    g.criteria.forEach((c, idx) => {
-      const row = el('div', { class: 'mb-2' });
-      const top = el('div', { class: 'flex items-center gap-1' });
-      const wrap = el('label', { class: 'criterion' + (c.done ? ' done' : '') + ' flex-1' });
-      const cb = el('input', { type: 'checkbox' });
-      cb.checked = !!c.done;
-      cb.onchange = () => toggleCriterion(g.id, idx);
-      wrap.appendChild(cb);
-      wrap.appendChild(el('span', { class: 'text-sm' }, c.text));
-      top.appendChild(wrap);
-      const addTaskBtn = el('button', {
-        type: 'button',
-        class: 'criterion-add-task-btn',
-        onclick: () => openModal('task', { goalId: g.id, criterionIdx: idx, criterionText: c.text }),
-      }, '+');
-      top.appendChild(addTaskBtn);
-      const delCritBtn = el('button', {
-        type: 'button',
-        class: 'criterion-delete-btn',
-        onclick: () => deleteCriterionItem(g.id, idx, c.text),
-      }, '×');
-      top.appendChild(delCritBtn);
-      row.appendChild(top);
-      if (Array.isArray(c.tasks) && c.tasks.length) {
-        const taskLinks = el('div', { class: 'ml-6 mt-1 flex flex-wrap gap-1' });
-        for (const tid of c.tasks) {
-          const t = taskById(tid);
-          if (!t) continue;
-          taskLinks.appendChild(el('a', {
-            class: 'criterion-task-link',
-            onclick: () => select('task', t.id),
-          }, t.title || t.id));
-        }
-        row.appendChild(taskLinks);
-      }
-      list.appendChild(row);
-    });
-    sect.appendChild(list);
-    root.appendChild(sect);
-  }
-
-  if (Array.isArray(g.why) && g.why.length) {
-    root.appendChild(sectionTitle('Why'));
-    root.appendChild(el('div', { class: 'body-md mb-8' }, ...g.why.map(line => el('p', {}, line))));
-  }
-
-  if (g.data) {
-    root.appendChild(sectionTitle('Data'));
-    const dataDiv = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
-    dataDiv.innerHTML = marked.parse(g.data);
-    root.appendChild(dataDiv);
-  }
-
-  if (g.body) {
-    root.appendChild(sectionTitle('Description'));
-    const bodyDiv = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
-    bodyDiv.innerHTML = marked.parse(g.body);
-    root.appendChild(bodyDiv);
-  }
-
-  if (g.conclusion) {
-    root.appendChild(sectionTitle('Conclusion'));
-    const concDiv = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
-    concDiv.innerHTML = marked.parse(g.conclusion);
-    root.appendChild(concDiv);
-  }
-
-  // Cross-references
-  const refs = [];
-  if (g.parent_goal) {
-    const pg = goalById(g.parent_goal);
-    if (pg) refs.push({ label: 'Parent goal', items: [pg], kind: 'goal' });
-  }
-  const subs = subGoalsOf(g.id);
-  if (subs.length) refs.push({ label: 'Sub-goals', items: subs, kind: 'goal' });
-
-  const tasks = tasksForGoal(g.id);
-  if (tasks.length) refs.push({ label: 'Tasks', items: tasks, kind: 'task' });
-
-  if (Array.isArray(g.related_goals) && g.related_goals.length) {
-    const items = g.related_goals.map(goalById).filter(Boolean);
-    if (items.length) refs.push({ label: 'Related goals', items, kind: 'goal' });
-  }
-
-  for (const ref of refs) {
-    root.appendChild(sectionTitle(ref.label));
-    const grid = el('div', { class: 'grid grid-cols-1 md:grid-cols-2 gap-2 mb-6' });
-    for (const item of ref.items) grid.appendChild(refCard(item, ref.kind));
-    root.appendChild(grid);
-  }
-}
-
-function renderTaskDetail(root, t) {
-  if (!t) { root.appendChild(el('div', { class: 'text-slate-500' }, 'Task not found.')); return; }
-  root.appendChild(renderHeader(t, 'task'));
-
-  if (t.contribution_summary) {
-    root.appendChild(el('div', { class: 'mb-6 px-4 py-3 border-l-2 border-slate-700 italic text-slate-300' },
-      t.contribution_summary));
-  }
-
-  if (t.estimated_effort) {
-    root.appendChild(el('div', { class: 'mb-4 text-xs text-slate-400' }, `Estimated effort: ${t.estimated_effort}`));
-  }
-
-  if (t.body) {
-    root.appendChild(sectionTitle('Description'));
-    const taskBodyDiv = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
-    taskBodyDiv.innerHTML = marked.parse(t.body);
-    root.appendChild(taskBodyDiv);
-  }
-
-  if (Array.isArray(t.satisfies) && t.satisfies.length) {
-    root.appendChild(sectionTitle('Satisfies criteria'));
-    const box = el('div', { class: 'space-y-1 mb-6' });
-    for (const s of t.satisfies) {
-      const g = goalById(s.goal);
-      if (!g) continue;
-      const idx = typeof s.criterion === 'number' ? s.criterion : parseInt(s.criterion, 10);
-      const crit = Array.isArray(g.criteria) && g.criteria[idx];
-      const line = el('a', {
-        class: 'satisfies-link',
-        onclick: () => select('goal', g.id),
-      });
-      line.appendChild(el('span', { class: 'text-xs text-slate-500 font-mono mr-2' }, `${g.id}#${idx}`));
-      line.appendChild(el('span', { class: 'text-sm text-slate-200' }, crit ? crit.text : '(unknown criterion)'));
-      box.appendChild(line);
-    }
-    root.appendChild(box);
-  }
-
-  const refs = [];
-  if (Array.isArray(t.goals) && t.goals.length) {
-    const items = t.goals.map(goalById).filter(Boolean);
-    refs.push({ label: 'Advances goals', items, kind: 'goal' });
-  } else {
-    refs.push({ label: 'Advances goals', items: [], kind: 'goal', empty: '(orphan task — no goal)' });
-  }
-  if (Array.isArray(t.blocked_by) && t.blocked_by.length) {
-    const items = t.blocked_by.map(taskById).filter(Boolean);
-    refs.push({ label: 'Blocked by', items, kind: 'task' });
-  }
-  if (Array.isArray(t.related_tasks) && t.related_tasks.length) {
-    const items = t.related_tasks.map(taskById).filter(Boolean);
-    refs.push({ label: 'Related tasks', items, kind: 'task' });
-  }
-
-  for (const ref of refs) {
-    root.appendChild(sectionTitle(ref.label));
-    if (!ref.items.length && ref.empty) {
-      root.appendChild(el('div', { class: 'text-xs italic text-slate-500 mb-6' }, ref.empty));
-      continue;
-    }
-    const grid = el('div', { class: 'grid grid-cols-1 md:grid-cols-2 gap-2 mb-6' });
-    for (const item of ref.items) grid.appendChild(refCard(item, ref.kind));
-    root.appendChild(grid);
-  }
-}
-
-function renderDecisionDetail(root, d) {
-  if (!d) { root.appendChild(el('div', { class: 'text-slate-500' }, 'Decision not found.')); return; }
-  root.appendChild(renderHeader(d, 'decision'));
-
-  if (Array.isArray(d.choices) && d.choices.length) {
-    const sect = el('div', { class: 'mb-8' });
-    sect.appendChild(el('div', { class: 'flex items-center justify-between mb-2' },
-      el('h3', { class: 'text-xs uppercase tracking-wider text-slate-400 font-semibold' }, 'Choices'),
-    ));
-    const list = el('div', { class: 'space-y-1' });
-    const hasChosen = d.choices.some(c => c.chosen);
-    d.choices.forEach((c, idx) => {
-      const row = el('div', { class: 'mb-1 flex items-center gap-1' });
-      const stateClass = c.chosen ? ' chosen' : (hasChosen ? ' unchosen' : '');
-      const wrap = el('label', { class: 'choice' + stateClass + ' flex-1' });
-      const rb = el('input', { type: 'radio', name: `choices-${d.id}` });
-      rb.checked = !!c.chosen;
-      rb.onchange = () => selectChoice(d.id, idx);
-      wrap.appendChild(rb);
-      wrap.appendChild(el('span', { class: 'text-sm' }, c.text));
-      row.appendChild(wrap);
-      const delBtn = el('button', {
-        type: 'button',
-        class: 'criterion-delete-btn',
-        onclick: () => deleteChoiceItem(d.id, idx, c.text),
-      }, '×');
-      row.appendChild(delBtn);
-      list.appendChild(row);
-    });
-    sect.appendChild(list);
-    root.appendChild(sect);
-  }
-
-  if (Array.isArray(d.considerations) && d.considerations.length) {
-    root.appendChild(sectionTitle('CONSIDERATION'));
-    const ul = el('ul', { class: 'body-md mb-8 list-disc pl-5 space-y-1' });
-    for (const c of d.considerations) ul.appendChild(el('li', { class: 'text-sm text-slate-200' }, c));
-    root.appendChild(ul);
-  }
-
-  if (d.summary) {
-    root.appendChild(sectionTitle('Summary'));
-    const div = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
-    div.innerHTML = marked.parse(d.summary);
-    root.appendChild(div);
-  }
-
-  if (d.why) {
-    root.appendChild(sectionTitle('Why'));
-    const div = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
-    div.innerHTML = marked.parse(d.why);
-    root.appendChild(div);
-  }
-
-  if (d.data) {
-    root.appendChild(sectionTitle('Data'));
-    const div = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
-    div.innerHTML = marked.parse(d.data);
-    root.appendChild(div);
-  }
-
-  if (d.body) {
-    root.appendChild(sectionTitle('Description'));
-    const div = el('div', { class: 'body-md mb-8 prose prose-invert prose-sm max-w-none' });
-    div.innerHTML = marked.parse(d.body);
-    root.appendChild(div);
-  }
-}
-
 function sectionTitle(text) {
   return el('h3', { class: 'text-xs uppercase tracking-wider text-slate-400 font-semibold mb-2' }, text);
 }
-
 
 function refCard(item, kind) {
   const card = el('div', { class: 'ref-card', onclick: () => select(kind, item.id) });
@@ -864,6 +779,19 @@ function refCard(item, kind) {
   if (typeof item.priority === 'number') meta.appendChild(badge('priority', `p${item.priority}`));
   card.appendChild(meta);
   return card;
+}
+
+function renderRefs(root, refs) {
+  for (const ref of refs) {
+    root.appendChild(sectionTitle(ref.label));
+    if (!ref.items.length && ref.empty) {
+      root.appendChild(el('div', { class: 'text-xs italic text-slate-500 mb-6' }, ref.empty));
+      continue;
+    }
+    const grid = el('div', { class: 'grid grid-cols-1 md:grid-cols-2 gap-2 mb-6' });
+    for (const item of ref.items) grid.appendChild(refCard(item, ref.kind));
+    root.appendChild(grid);
+  }
 }
 
 // ---------- selection ----------
@@ -903,7 +831,7 @@ async function bootstrap() {
   initModal();
   $$('.tab-btn').forEach(b => b.onclick = () => setTab(b.dataset.tab));
   try {
-    state.data = await api('/api/data');
+    state.data = wrapSnapshot(await api('/api/data'));
     const savedLastByTab = JSON.parse(localStorage.getItem('todo_last_by_tab') || 'null');
     if (savedLastByTab && typeof savedLastByTab === 'object') {
       for (const k of ['hierarchy', 'tasks', 'groups', 'decisions']) {
@@ -930,14 +858,13 @@ async function bootstrap() {
   } catch (e) {
     $('#detail').textContent = 'Failed to load data: ' + e.message;
   }
-  // SSE for live updates
   const es = new EventSource('/api/events');
   es.onopen = () => { $('#conn-indicator').textContent = 'live'; $('#conn-indicator').className = 'text-xs text-emerald-400'; };
   es.onerror = () => { $('#conn-indicator').textContent = 'disconnected'; $('#conn-indicator').className = 'text-xs text-rose-400'; };
   es.onmessage = (msg) => {
     const event = JSON.parse(msg.data);
     if (event.snapshot) {
-      state.data = event.snapshot;
+      state.data = wrapSnapshot(event.snapshot);
       render();
     }
   };
