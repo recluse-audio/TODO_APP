@@ -2,7 +2,8 @@ export const state = {
   data: { goals: [], tasks: [], decisions: [] },
   selected: null, // { kind: 'goal'|'task'|'decision', id: '...' }
   tab: 'hierarchy',
-  lastSelectedByTab: { hierarchy: null, tasks: null, groups: null, decisions: null },
+  lastSelectedByTab: { hierarchy: null, tasks: null, decisions: null },
+  selectedGroup: null, // null = all; '' = ungrouped; else group name (matches self + descendants via '-')
 };
 
 export const $ = (sel, root = document) => root.querySelector(sel);

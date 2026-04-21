@@ -10,11 +10,52 @@ export function renderSidebar() {
   btns.appendChild(el('button', { class: 'create-btn', type: 'button', onclick: () => openModal('goal') }, '+ GOAL'));
   btns.appendChild(el('button', { class: 'create-btn', type: 'button', onclick: () => openModal('task') }, '+ TASK'));
   sb.appendChild(btns);
+
+  sb.appendChild(renderGroupFilter());
+
   if (state.tab === 'hierarchy') renderHierarchy(sb);
-  else if (state.tab === 'groups') renderGroups(sb);
   else if (state.tab === 'tasks') renderTasksList(sb);
   else if (state.tab === 'decisions') renderDecisionsList(sb);
 }
+
+// --- Group filter (global, applied to all tabs) ---
+
+function renderGroupFilter() {
+  const sel = state.selectedGroup;
+  const groups = allGroups().sort();
+  const depthOf = (g) => (g.match(/-/g) || []).length;
+  const labelFor = (g) => '    '.repeat(depthOf(g)) + g;
+
+  const dropdown = el('select', {
+    class: 'group-select',
+    onchange: (e) => {
+      const v = e.target.value;
+      state.selectedGroup = v === '__all' ? null : v === '__ungrouped' ? '' : v;
+      if (state.selectedGroup === null) localStorage.removeItem('todo_selected_group');
+      else localStorage.setItem('todo_selected_group', state.selectedGroup);
+      renderSidebar();
+    },
+  });
+  const mkOpt = (value, text, selected) => {
+    const o = el('option', { value }, text);
+    if (selected) o.selected = true;
+    return o;
+  };
+  dropdown.appendChild(mkOpt('__all', '(all groups)', sel === null));
+  dropdown.appendChild(mkOpt('__ungrouped', '(ungrouped)', sel === ''));
+  for (const g of groups) dropdown.appendChild(mkOpt(g, labelFor(g), sel === g));
+  return dropdown;
+}
+
+function matchesGroup(item) {
+  const sel = state.selectedGroup;
+  if (sel === null) return true;
+  const groups = Array.isArray(item.groups) ? item.groups : [];
+  if (sel === '') return groups.length === 0;
+  return groups.some(g => g === sel || g.startsWith(sel + '-'));
+}
+
+// --- Tab renderers ---
 
 function renderHierarchy(sb) {
   const sections = [
@@ -23,9 +64,21 @@ function renderHierarchy(sb) {
     { label: 'Completed', statuses: ['completed'] },
     { label: 'Abandoned', statuses: ['abandoned'] },
   ];
+  // Keep a goal if it matches the group filter OR any descendant matches,
+  // so the tree retains context when filtering.
+  const keepCache = new Map();
+  const keep = (g) => {
+    if (keepCache.has(g.id)) return keepCache.get(g.id);
+    const self = matchesGroup(g);
+    const children = subGoalsOf(g.id);
+    const any = self || children.some(c => keep(c));
+    keepCache.set(g.id, any);
+    return any;
+  };
+
   const renderNode = (g) => {
     const node = el('div', {}, g.renderSidebarItem());
-    const subs = subGoalsOf(g.id);
+    const subs = subGoalsOf(g.id).filter(keep);
     if (subs.length) {
       const wrap = el('div', { class: 'tree-children' });
       for (const sg of subs) wrap.appendChild(renderNode(sg));
@@ -36,32 +89,16 @@ function renderHierarchy(sb) {
   for (const sec of sections) {
     const goals = state.data.goals
       .filter(g => sec.statuses.includes(g.status) && !g.parent_goal)
+      .filter(keep)
       .sort(byPriorityDesc);
     sb.appendChild(el('div', { class: 'sb-section-title' }, sec.label));
     for (const g of goals) sb.appendChild(renderNode(g));
   }
 }
 
-function renderGroups(sb) {
-  const all = [...state.data.goals, ...state.data.tasks, ...(state.data.decisions || [])];
-  const inGroup = (item, grp) => Array.isArray(item.groups) && item.groups.includes(grp);
-  const ungrouped = (item) => !item.groups || item.groups.length === 0;
-  for (const grp of allGroups()) {
-    sb.appendChild(el('div', { class: 'sb-section-title' }, grp));
-    for (const i of all.filter(x => inGroup(x, grp)).sort(byPriorityDesc)) {
-      sb.appendChild(i.renderSidebarItem());
-    }
-  }
-  const missing = all.filter(ungrouped).sort(byPriorityDesc);
-  if (missing.length) {
-    sb.appendChild(el('div', { class: 'sb-section-title' }, '(ungrouped)'));
-    for (const i of missing) sb.appendChild(i.renderSidebarItem());
-  }
-}
-
 function renderStatusSections(sb, items, sections) {
   for (const sec of sections) {
-    const picked = items.filter(i => sec.statuses.includes(i.status)).sort(byPriorityDesc);
+    const picked = items.filter(i => sec.statuses.includes(i.status)).filter(matchesGroup).sort(byPriorityDesc);
     sb.appendChild(el('div', { class: 'sb-section-title' }, sec.label));
     for (const i of picked) sb.appendChild(i.renderSidebarItem());
   }

@@ -14,14 +14,16 @@ async function bootstrap() {
     state.data = wrapSnapshot(await api('/api/data'));
     const savedLastByTab = JSON.parse(localStorage.getItem('todo_last_by_tab') || 'null');
     if (savedLastByTab && typeof savedLastByTab === 'object') {
-      for (const k of ['hierarchy', 'tasks', 'groups', 'decisions']) {
+      for (const k of ['hierarchy', 'tasks', 'decisions']) {
         if (savedLastByTab[k]) state.lastSelectedByTab[k] = savedLastByTab[k];
       }
     }
     const savedTab = localStorage.getItem('todo_tab');
-    const initialTab = ['hierarchy', 'tasks', 'groups', 'decisions'].includes(savedTab) ? savedTab : 'hierarchy';
+    const initialTab = ['hierarchy', 'tasks', 'decisions'].includes(savedTab) ? savedTab : 'hierarchy';
     state.tab = initialTab;
     $$('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === initialTab));
+    const savedGroup = localStorage.getItem('todo_selected_group');
+    state.selectedGroup = savedGroup === null ? null : savedGroup;
 
     const allIds = new Set([
       ...state.data.goals.map(g => g.id),
