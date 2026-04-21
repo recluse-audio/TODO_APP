@@ -1,7 +1,8 @@
 import { state, el } from '../core/state.js';
-import { deleteItem } from '../core/api.js';
+import { deleteItem, post } from '../core/api.js';
+import { allGroups } from '../core/data.js';
 import { badge, statusSelect, sectionTitle } from '../ui/detail.js';
-import { select } from '../ui/render.js';
+import { select, render } from '../ui/render.js';
 
 export class TodoItemView {
   // subclass static fields: kind, statuses, createLabel
@@ -35,9 +36,61 @@ export class TodoItemView {
         typeof this.priority === 'number' ? badge('priority', `priority ${this.priority}`) : null,
         this.target_date ? badge('date', `target ${this.target_date}`) : null,
         this.created ? badge('date', `created ${this.created}`) : null,
-        ...(this.groups || []).map(g => badge('group', g)),
+        ...(this.groups || []).map(g => this.renderGroupBadge(g)),
+        this.renderAddGroupControl(),
       ),
     );
+  }
+
+  renderGroupBadge(g) {
+    const remove = async () => {
+      try { await post('/api/groups/remove', { kind: this.constructor.kind, id: this.id, group: g }); }
+      catch (e) { alert('Remove failed: ' + e.message); }
+    };
+    const rm = el('button', { type: 'button', class: 'group-remove', title: 'Remove group', onclick: remove }, '×');
+    const b = badge('group', g);
+    b.appendChild(rm);
+    return b;
+  }
+
+  renderAddGroupControl() {
+    const wrap = el('span', { class: 'add-group-wrap' });
+    if (this._addingGroup) {
+      const input = el('input', {
+        type: 'text',
+        class: 'add-group-input',
+        placeholder: 'group…',
+        list: `add-group-dl-${this.id}`,
+      });
+      const dl = el('datalist', { id: `add-group-dl-${this.id}` });
+      for (const g of allGroups()) {
+        if (!(this.groups || []).includes(g)) dl.appendChild(el('option', { value: g }));
+      }
+      const commit = async () => {
+        const v = input.value.trim().toLowerCase();
+        this._addingGroup = false;
+        if (!v) { render(); return; }
+        try { await post('/api/groups/add', { kind: this.constructor.kind, id: this.id, group: v }); }
+        catch (e) { alert('Add failed: ' + e.message); render(); }
+      };
+      input.onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        else if (e.key === 'Escape') { e.preventDefault(); this._addingGroup = false; render(); }
+      };
+      input.onblur = commit;
+      wrap.appendChild(input);
+      wrap.appendChild(dl);
+      setTimeout(() => input.focus(), 0);
+    } else {
+      const btn = el('button', {
+        type: 'button',
+        class: 'add-group-btn',
+        title: 'Add group',
+        onclick: () => { this._addingGroup = true; render(); },
+      }, '+ group');
+      wrap.appendChild(btn);
+    }
+    return wrap;
   }
 
   renderDescription(root) {
