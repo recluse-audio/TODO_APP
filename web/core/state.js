@@ -15,7 +15,10 @@ export const el = (tag, attrs = {}, ...children) => {
     else if (k === 'onclick') e.onclick = v;
     else if (k === 'onchange') e.onchange = v;
     else if (k.startsWith('data-')) e.setAttribute(k, v);
-    else e[k] = v;
+    else {
+      try { e[k] = v; }
+      catch { e.setAttribute(k, v); }
+    }
   }
   for (const c of children.flat()) {
     if (c == null) continue;

@@ -27,6 +27,20 @@ export class GoalView extends TodoItemView {
     catch (e) { alert('Delete failed: ' + e.message); }
   }
 
+  async submitEditCriterion(idx, currentText, newText) {
+    const trimmed = (newText || '').trim();
+    if (!trimmed || trimmed === currentText) { render(); return; }
+    try { await post('/api/criteria/edit', { goalId: this.id, idx, text: trimmed }); }
+    catch (e) { alert('Edit failed: ' + e.message); render(); }
+  }
+
+  async addCriterion(text) {
+    const trimmed = (text || '').trim();
+    if (!trimmed) return;
+    try { await post('/api/criteria/add', { goalId: this.id, text: trimmed }); }
+    catch (e) { alert('Add failed: ' + e.message); }
+  }
+
   renderDetail(root) {
     super.renderDetail(root);
 
@@ -35,16 +49,17 @@ export class GoalView extends TodoItemView {
         this.measurable_outcome));
     }
 
-    if (Array.isArray(this.criteria) && this.criteria.length) {
-      const done = this.criteria.filter(c => c.done).length;
-      const total = this.criteria.length;
+    {
+      const criteria = Array.isArray(this.criteria) ? this.criteria : [];
+      const done = criteria.filter(c => c.done).length;
+      const total = criteria.length;
       const sect = el('div', { class: 'mb-8' });
       sect.appendChild(el('div', { class: 'flex items-center justify-between mb-2' },
         el('h3', { class: 'text-xs uppercase tracking-wider text-slate-400 font-semibold' }, 'Criteria'),
-        el('div', { class: 'text-xs text-slate-400' }, `${done} / ${total}`),
+        el('div', { class: 'text-xs text-slate-400' }, total ? `${done} / ${total}` : ''),
       ));
       const list = el('div', { class: 'space-y-1' });
-      this.criteria.forEach((c, idx) => {
+      criteria.forEach((c, idx) => {
         const row = el('div', { class: 'mb-2' });
         const top = el('div', { class: 'flex items-center gap-1' });
         const wrap = el('label', { class: 'criterion' + (c.done ? ' done' : '') + ' flex-1' });
@@ -52,13 +67,34 @@ export class GoalView extends TodoItemView {
         cb.checked = !!c.done;
         cb.onchange = () => this.toggleCriterion(idx);
         wrap.appendChild(cb);
-        wrap.appendChild(el('span', { class: 'text-sm' }, c.text));
+        const editing = this._editingIdx === idx;
+        if (editing) {
+          const input = el('input', { type: 'text', class: 'form-input flex-1' });
+          input.value = c.text;
+          const commit = () => { this._editingIdx = null; this.submitEditCriterion(idx, c.text, input.value); };
+          const cancel = () => { this._editingIdx = null; render(); };
+          input.onkeydown = (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+          };
+          input.onblur = commit;
+          wrap.appendChild(input);
+          setTimeout(() => { input.focus(); input.select(); }, 0);
+        } else {
+          wrap.appendChild(el('span', { class: 'text-sm' }, c.text));
+        }
         top.appendChild(wrap);
         top.appendChild(el('button', {
           type: 'button',
           class: 'criterion-add-task-btn',
           onclick: () => openModal('task', { goalId: this.id, criterionIdx: idx, criterionText: c.text }),
         }, '+'));
+        top.appendChild(el('button', {
+          type: 'button',
+          class: 'criterion-delete-btn',
+          title: 'Edit criterion',
+          onclick: () => { this._editingIdx = idx; render(); },
+        }, '✎'));
         top.appendChild(el('button', {
           type: 'button',
           class: 'criterion-delete-btn',
@@ -80,6 +116,25 @@ export class GoalView extends TodoItemView {
         list.appendChild(row);
       });
       sect.appendChild(list);
+
+      const addRow = el('div', { class: 'flex items-center gap-1 mt-2' });
+      const addInput = el('input', {
+        type: 'text',
+        class: 'form-input flex-1',
+        placeholder: 'Add a criterion…',
+      });
+      const submit = () => {
+        const v = addInput.value;
+        if (!v.trim()) return;
+        addInput.value = '';
+        this.addCriterion(v);
+      };
+      addInput.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } };
+      const addBtn = el('button', { type: 'button', class: 'criterion-add-task-btn', onclick: submit }, '+');
+      addRow.appendChild(addInput);
+      addRow.appendChild(addBtn);
+      sect.appendChild(addRow);
+
       root.appendChild(sect);
     }
 
