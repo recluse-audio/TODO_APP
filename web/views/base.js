@@ -1,6 +1,6 @@
 import { state, el } from '../core/state.js';
 import { deleteItem, post } from '../core/api.js';
-import { allGroups } from '../core/data.js';
+import { allGroups, groupColor } from '../core/data.js';
 import { badge, statusSelect, sectionTitle } from '../ui/detail.js';
 import { select, render } from '../ui/render.js';
 
@@ -49,6 +49,8 @@ export class TodoItemView {
     };
     const rm = el('button', { type: 'button', class: 'group-remove', title: 'Remove group', onclick: remove }, '×');
     const b = badge('group', g);
+    const c = groupColor(g);
+    if (c) b.style.cssText = `background:${c.bg};color:${c.fg};border:1px solid ${c.border}`;
     b.appendChild(rm);
     return b;
   }

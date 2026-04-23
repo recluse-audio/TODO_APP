@@ -1,5 +1,5 @@
 import { state, el, $ } from '../core/state.js';
-import { subGoalsOf, byPriorityDesc, allGroups } from '../core/data.js';
+import { subGoalsOf, byPriorityDesc, allGroups, groupColor } from '../core/data.js';
 import { openModal } from './modal.js';
 
 export function renderSidebar() {
@@ -43,7 +43,18 @@ function renderGroupFilter() {
   };
   dropdown.appendChild(mkOpt('__all', '(all groups)', sel === null));
   dropdown.appendChild(mkOpt('__ungrouped', '(ungrouped)', sel === ''));
-  for (const g of groups) dropdown.appendChild(mkOpt(g, labelFor(g), sel === g));
+  for (const g of groups) {
+    const o = mkOpt(g, labelFor(g), sel === g);
+    const c = groupColor(g);
+    if (c) o.style.color = c.fg;
+    dropdown.appendChild(o);
+  }
+  if (sel) {
+    const c = groupColor(sel);
+    if (c) dropdown.style.color = c.fg;
+  } else {
+    dropdown.style.color = '';
+  }
   return dropdown;
 }
 
