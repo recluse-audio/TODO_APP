@@ -24,7 +24,7 @@ export function openModal(kind, opts = {}) {
   const title = kind === 'goal' ? 'New GOAL'
     : kind === 'decision' ? 'New DECISION'
     : opts.criterionText ? `New TASK → ${opts.criterionText}` : 'New TASK';
-  hdr.appendChild(el('h2', { class: 'text-base font-semibold text-slate-100' }, title));
+  hdr.appendChild(el('h2', { class: 'text-base font-semibold pal-text' }, title));
   hdr.appendChild(el('button', { class: 'modal-close', type: 'button', onclick: closeModal }, '×'));
   dialog.appendChild(hdr);
   dialog.appendChild(VIEW_CLASSES[kind].buildForm(opts));

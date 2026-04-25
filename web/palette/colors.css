@@ -1,0 +1,131 @@
+/* ── Palette controls (dock UI) ─────────────────────────────── */
+#palette-switcher, #palette-rotate, #palette-copy {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+/* ── Palette 0: slate (default, matches original TODO chrome) ── */
+:root {
+  --color-bg:      #020617;
+  --color-surface: #1e293b;
+  --color-border:  #334155;
+  --color-text:    #f1f5f9;
+  --color-accent:  #60a5fa;
+  --color-link:    #93c5fd;
+  --color-code:    #cbd5e1;
+  --color-logo:    #60a5fa;
+}
+
+/* ── Palette 1: paper (light, resume-friendly) ─────────────── */
+[data-color-palette="paper"] {
+  --color-bg:      #ffffff;
+  --color-surface: #f5f5f5;
+  --color-border:  #999999;
+  --color-text:    #222222;
+  --color-accent:  #555555;
+  --color-link:    #0366d6;
+  --color-code:    #333333;
+  --color-logo:    #222222;
+}
+
+/* ── Palette 2: original (recluse magenta/navy) ─────────────── */
+[data-color-palette="original"] {
+  --color-bg:      #861240;
+  --color-surface: #0D3C76;
+  --color-border:  #4BE5B1;
+  --color-text:    #C4BFCC;
+  --color-accent:  #f7cf64;
+  --color-link:    #f52176;
+  --color-code:    #00ff00;
+  --color-logo:    #f7cf64;
+}
+
+/* ── Palette 3: forest ──────────────────────────────────────── */
+[data-color-palette="forest"] {
+  --color-bg:      #141A16;
+  --color-surface: #2F3931;
+  --color-border:  #424946;
+  --color-text:    #D1E9CE;
+  --color-accent:  #879358;
+  --color-link:    #6C3D15;
+  --color-code:    #D1E9CE;
+  --color-logo:    #879358;
+}
+
+/* ── Palette 4: copperwood ──────────────────────────────────── */
+[data-color-palette="copperwood"] {
+  --color-bg:      #141A16;
+  --color-surface: #2F3931;
+  --color-border:  #424946;
+  --color-text:    #FCF8EE;
+  --color-accent:  #879358;
+  --color-link:    #B8640B;
+  --color-code:    #494324;
+  --color-logo:    #B8640B;
+}
+
+/* ── Palette 5: octobersky ──────────────────────────────────── */
+[data-color-palette="octobersky"] {
+  --color-bg:      #879358;
+  --color-surface: #B8640B;
+  --color-border:  #494324;
+  --color-text:    #141A16;
+  --color-accent:  #2F3931;
+  --color-link:    #424946;
+  --color-code:    #FCF8EE;
+  --color-logo:    #FCF8EE;
+}
+
+/* ── Palette 6: stoneflower ─────────────────────────────────── */
+[data-color-palette="stoneflower"] {
+  --color-bg:      #381609;
+  --color-surface: #2D2A2A;
+  --color-border:  #4A5F56;
+  --color-text:    #FDF7EB;
+  --color-accent:  #C69E53;
+  --color-link:    #424946;
+  --color-code:    #FCF8EE;
+  --color-logo:    #C69E53;
+}
+
+/* ── Palette 7: northshoresummer ───────────────────────────── */
+[data-color-palette="northshoresummer"] {
+  --color-bg:      #663D18;
+  --color-surface: #66765F;
+  --color-border:  #5B8EA3;
+  --color-text:    #FEFEFE;
+  --color-accent:  #E8E4AC;
+  --color-link:    #AB805C;
+  --color-code:    #E8E4AC;
+  --color-logo:    #5B8EA3;
+}
+
+/* ── Palette 8: chocolatecream ─────────────────────────────── */
+[data-color-palette="chocolatecream"] {
+  --color-bg:      #C69E53;
+  --color-surface: #424946;
+  --color-border:  #FCF8EE;
+  --color-text:    #d8e994;
+  --color-accent:  #381609;
+  --color-link:    #2D2A2A;
+  --color-code:    #4A5F56;
+  --color-logo:    #FDF7EB;
+}
+
+/* ── Palette 9: chocolatestrawberry ────────────────────────── */
+[data-color-palette="chocolatestrawberry"] {
+  --color-bg:      #FCF8EE;
+  --color-surface: #d8e994;
+  --color-border:  #381609;
+  --color-text:    #2D2A2A;
+  --color-accent:  #4A5F56;
+  --color-link:    #08adf9;
+  --color-code:    #C69E53;
+  --color-logo:    #424946;
+}

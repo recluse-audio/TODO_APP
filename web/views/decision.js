@@ -32,7 +32,7 @@ export class DecisionView extends TodoItemView {
     if (Array.isArray(this.choices) && this.choices.length) {
       const sect = el('div', { class: 'mb-8' });
       sect.appendChild(el('div', { class: 'flex items-center justify-between mb-2' },
-        el('h3', { class: 'text-xs uppercase tracking-wider text-slate-400 font-semibold' }, 'Choices'),
+        el('h3', { class: 'text-xs uppercase tracking-wider pal-muted font-semibold' }, 'Choices'),
       ));
       const list = el('div', { class: 'space-y-1' });
       const hasChosen = this.choices.some(c => c.chosen);
@@ -60,7 +60,7 @@ export class DecisionView extends TodoItemView {
     if (Array.isArray(this.considerations) && this.considerations.length) {
       root.appendChild(sectionTitle('CONSIDERATION'));
       const ul = el('ul', { class: 'body-md mb-8 list-disc pl-5 space-y-1' });
-      for (const c of this.considerations) ul.appendChild(el('li', { class: 'text-sm text-slate-200' }, c));
+      for (const c of this.considerations) ul.appendChild(el('li', { class: 'text-sm pal-text' }, c));
       root.appendChild(ul);
     }
 

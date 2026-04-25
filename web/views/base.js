@@ -27,7 +27,7 @@ export class TodoItemView {
     return el('div', { class: 'mb-6' },
       el('div', { class: 'flex items-baseline gap-3 flex-wrap' },
         el('h2', { class: 'text-2xl font-semibold tracking-tight flex-1' }, this.title || this.id),
-        el('span', { class: 'text-xs text-slate-500 font-mono' }, this.id),
+        el('span', { class: 'text-xs pal-muted font-mono' }, this.id),
         deleteBtn,
       ),
       el('div', { class: 'mt-3 flex items-center gap-2 flex-wrap' },

@@ -6,24 +6,27 @@
   <title>TODO</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="/static/palette/colors.css" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
-<body class="bg-slate-950 text-slate-100 antialiased">
+<body class="antialiased" style="background: var(--color-bg); color: var(--color-text);">
   <div id="app" class="h-screen flex flex-col">
-    <header class="border-b border-slate-800 px-5 py-3 flex items-center gap-4 shrink-0">
-      <h1 class="text-sm font-semibold tracking-wide text-slate-300">TODO</h1>
-      <div id="conn-indicator" class="text-xs text-slate-500">connecting…</div>
+    <header class="px-5 py-3 flex items-center gap-4 shrink-0" style="border-bottom: 1px solid var(--color-border);">
+      <h1 class="text-sm font-semibold tracking-wide" style="color: var(--color-logo);">TODO</h1>
+      <div id="conn-indicator" class="text-xs" style="color: var(--color-accent);">connecting…</div>
       <div class="ml-auto flex items-center gap-2">
         <button data-tab="decisions" class="tab-btn px-3 py-1 rounded text-xs font-medium">DECISIONS</button>
         <button data-tab="hierarchy" class="tab-btn px-3 py-1 rounded text-xs font-medium">GOALS</button>
         <button data-tab="tasks" class="tab-btn px-3 py-1 rounded text-xs font-medium">TASKS</button>
+        <palette-controls></palette-controls>
       </div>
     </header>
     <main class="flex-1 flex overflow-hidden">
-      <aside id="sidebar" class="w-80 border-r border-slate-800 overflow-y-auto p-3"></aside>
+      <aside id="sidebar" class="w-80 overflow-y-auto p-3" style="border-right: 1px solid var(--color-border);"></aside>
       <section id="detail" class="flex-1 overflow-y-auto p-8"></section>
     </main>
   </div>
+  <script src="/static/palette/palette-controls.js"></script>
   <script type="module" src="/static/app.js"></script>
 </body>
 </html>

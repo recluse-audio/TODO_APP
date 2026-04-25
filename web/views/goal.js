@@ -45,7 +45,7 @@ export class GoalView extends TodoItemView {
     super.renderDetail(root);
 
     if (this.measurable_outcome) {
-      root.appendChild(el('div', { class: 'mb-6 px-4 py-3 border-l-2 border-slate-700 italic text-slate-300' },
+      root.appendChild(el('div', { class: 'mb-6 px-4 py-3 border-l-2 pal-border italic pal-text' },
         this.measurable_outcome));
     }
 
@@ -55,8 +55,8 @@ export class GoalView extends TodoItemView {
       const total = criteria.length;
       const sect = el('div', { class: 'mb-8' });
       sect.appendChild(el('div', { class: 'flex items-center justify-between mb-2' },
-        el('h3', { class: 'text-xs uppercase tracking-wider text-slate-400 font-semibold' }, 'Criteria'),
-        el('div', { class: 'text-xs text-slate-400' }, total ? `${done} / ${total}` : ''),
+        el('h3', { class: 'text-xs uppercase tracking-wider pal-muted font-semibold' }, 'Criteria'),
+        el('div', { class: 'text-xs pal-muted' }, total ? `${done} / ${total}` : ''),
       ));
       const list = el('div', { class: 'space-y-1' });
       criteria.forEach((c, idx) => {

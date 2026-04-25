@@ -21,14 +21,14 @@ export function statusSelect(kind, current, options) {
 }
 
 export function sectionTitle(text) {
-  return el('h3', { class: 'text-xs uppercase tracking-wider text-slate-400 font-semibold mb-2' }, text);
+  return el('h3', { class: 'text-xs uppercase tracking-wider pal-muted font-semibold mb-2' }, text);
 }
 
 export function refCard(item, kind) {
   const card = el('div', { class: 'ref-card', onclick: () => select(kind, item.id) });
   card.appendChild(el('div', { class: 'flex items-baseline gap-2' },
-    el('span', { class: 'text-sm font-medium text-slate-200' }, item.title || item.id),
-    el('span', { class: 'text-xs text-slate-500 font-mono ml-auto' }, item.id),
+    el('span', { class: 'text-sm font-medium pal-text' }, item.title || item.id),
+    el('span', { class: 'text-xs pal-muted font-mono ml-auto' }, item.id),
   ));
   const meta = el('div', { class: 'mt-1 flex gap-2 text-xs' });
   if (item.status) meta.appendChild(badge(item.status, item.status));
@@ -41,7 +41,7 @@ export function renderRefs(root, refs) {
   for (const ref of refs) {
     root.appendChild(sectionTitle(ref.label));
     if (!ref.items.length && ref.empty) {
-      root.appendChild(el('div', { class: 'text-xs italic text-slate-500 mb-6' }, ref.empty));
+      root.appendChild(el('div', { class: 'text-xs italic pal-muted mb-6' }, ref.empty));
       continue;
     }
     const grid = el('div', { class: 'grid grid-cols-1 md:grid-cols-2 gap-2 mb-6' });
@@ -54,11 +54,11 @@ export function renderDetail() {
   const root = $('#detail');
   root.innerHTML = '';
   if (!state.selected) {
-    root.appendChild(el('div', { class: 'text-slate-500 text-sm' }, 'Select a goal, task, or decision from the sidebar.'));
+    root.appendChild(el('div', { class: 'pal-muted text-sm' }, 'Select a goal, task, or decision from the sidebar.'));
     return;
   }
   const { kind, id } = state.selected;
   const item = kind === 'goal' ? goalById(id) : kind === 'task' ? taskById(id) : decisionById(id);
-  if (!item) { root.appendChild(el('div', { class: 'text-slate-500' }, `${kind} not found.`)); return; }
+  if (!item) { root.appendChild(el('div', { class: 'pal-muted' }, `${kind} not found.`)); return; }
   item.renderDetail(root);
 }

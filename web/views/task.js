@@ -40,7 +40,7 @@ export class TaskView extends TodoItemView {
 
     const addInputRow = (number) => {
       const row = el('div', { class: 'flex items-start gap-1 mb-2' });
-      row.appendChild(el('span', { class: 'text-xs text-slate-500 font-mono mr-1 mt-2' }, `${number}.`));
+      row.appendChild(el('span', { class: 'text-xs pal-muted font-mono mr-1 mt-2' }, `${number}.`));
       const input = el('textarea', {
         class: 'form-input flex-1',
         rows: '2',
@@ -64,7 +64,7 @@ export class TaskView extends TodoItemView {
 
     steps.forEach((s, idx) => {
       const row = el('div', { class: 'flex items-start gap-1 mb-2' });
-      row.appendChild(el('span', { class: 'text-xs text-slate-500 font-mono mr-1 mt-1' }, `${idx + 1}.`));
+      row.appendChild(el('span', { class: 'text-xs pal-muted font-mono mr-1 mt-1' }, `${idx + 1}.`));
       const editing = this._editingStepIdx === idx;
       if (editing) {
         const input = el('textarea', { class: 'form-input flex-1', rows: '2' });
@@ -116,12 +116,12 @@ export class TaskView extends TodoItemView {
     super.renderDetail(root);
 
     if (this.contribution_summary) {
-      root.appendChild(el('div', { class: 'mb-6 px-4 py-3 border-l-2 border-slate-700 italic text-slate-300' },
+      root.appendChild(el('div', { class: 'mb-6 px-4 py-3 border-l-2 pal-border italic pal-text' },
         this.contribution_summary));
     }
 
     if (this.estimated_effort) {
-      root.appendChild(el('div', { class: 'mb-4 text-xs text-slate-400' }, `Estimated effort: ${this.estimated_effort}`));
+      root.appendChild(el('div', { class: 'mb-4 text-xs pal-muted' }, `Estimated effort: ${this.estimated_effort}`));
     }
 
     this.renderSteps(root);
@@ -140,8 +140,8 @@ export class TaskView extends TodoItemView {
           class: 'satisfies-link',
           onclick: () => select('goal', g.id),
         });
-        line.appendChild(el('span', { class: 'text-xs text-slate-500 font-mono mr-2' }, `${g.id}#${idx}`));
-        line.appendChild(el('span', { class: 'text-sm text-slate-200' }, crit ? crit.text : '(unknown criterion)'));
+        line.appendChild(el('span', { class: 'text-xs pal-muted font-mono mr-2' }, `${g.id}#${idx}`));
+        line.appendChild(el('span', { class: 'text-sm pal-text' }, crit ? crit.text : '(unknown criterion)'));
         box.appendChild(line);
       }
       root.appendChild(box);
@@ -195,8 +195,8 @@ export class TaskView extends TodoItemView {
       const cb = el('input', { type: 'checkbox', value: g.id });
       if (locked) { cb.checked = true; cb.disabled = true; }
       row.appendChild(cb);
-      row.appendChild(el('span', { class: 'text-xs text-slate-500 font-mono mr-2' }, `p${g.priority}`));
-      row.appendChild(el('span', { class: 'text-sm' + (locked ? ' text-blue-300 font-medium' : ' text-slate-200') }, g.title || g.id));
+      row.appendChild(el('span', { class: 'text-xs pal-muted font-mono mr-2' }, `p${g.priority}`));
+      row.appendChild(el('span', { class: 'text-sm' + (locked ? ' pal-link font-medium' : ' pal-text') }, g.title || g.id));
       goalsBox.appendChild(row);
     }
     form.appendChild(goalsBox);
