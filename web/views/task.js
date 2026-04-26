@@ -51,7 +51,7 @@ export class TaskView extends TodoItemView {
     sect.appendChild(sectionTitle('Steps'));
     const list = el('div', { class: 'space-y-1' });
 
-    const addInputRow = (number) => {
+    const addInputRow = (number, autoFocus) => {
       const row = el('div', { class: 'flex items-start gap-1 mb-2' });
       row.appendChild(el('span', { class: 'text-xs pal-muted font-mono mr-1 mt-2' }, `${number}.`));
       const input = el('textarea', {
@@ -62,7 +62,7 @@ export class TaskView extends TodoItemView {
       const commit = () => {
         const v = input.value;
         this._addingStep = false;
-        if (!v.trim()) { render(); return; }
+        if (!v.trim()) { if (autoFocus) render(); return; }
         this.addStep(v);
       };
       input.onkeydown = (e) => {
@@ -71,7 +71,7 @@ export class TaskView extends TodoItemView {
       };
       input.onblur = commit;
       row.appendChild(input);
-      setTimeout(() => input.focus(), 0);
+      if (autoFocus) setTimeout(() => input.focus(), 0);
       return row;
     };
 
@@ -129,7 +129,7 @@ export class TaskView extends TodoItemView {
     });
 
     if (steps.length === 0 || this._addingStep) {
-      list.appendChild(addInputRow(steps.length + 1));
+      list.appendChild(addInputRow(steps.length + 1, !!this._addingStep));
     }
 
     sect.appendChild(list);
