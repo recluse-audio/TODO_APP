@@ -32,6 +32,19 @@ export class TaskView extends TodoItemView {
     catch (e) { alert('Delete failed: ' + e.message); }
   }
 
+  async toggleStep(idx) {
+    const steps = Array.isArray(this.steps) ? this.steps : [];
+    const s = steps[idx];
+    if (typeof s === 'string') {
+      if (s.startsWith('[x] ')) steps[idx] = '[ ] ' + s.slice(4);
+      else if (s.startsWith('[ ] ')) steps[idx] = '[x] ' + s.slice(4);
+      else steps[idx] = '[x] ' + s;
+    }
+    render();
+    try { await post('/api/steps/toggle', { taskId: this.id, idx }); }
+    catch (e) { alert('Toggle failed: ' + e.message); }
+  }
+
   renderSteps(root) {
     const steps = Array.isArray(this.steps) ? this.steps : [];
     const sect = el('div', { class: 'mb-8' });
@@ -64,12 +77,23 @@ export class TaskView extends TodoItemView {
 
     steps.forEach((s, idx) => {
       const row = el('div', { class: 'flex items-start gap-1 mb-2' });
+      const done = typeof s === 'string' && s.startsWith('[x] ');
+      const displayText = typeof s === 'string' && (s.startsWith('[x] ') || s.startsWith('[ ] ')) ? s.slice(4) : s;
+      const cb = el('input', { type: 'checkbox', class: 'mt-2 mr-1 cursor-pointer' });
+      cb.checked = done;
+      cb.onchange = () => this.toggleStep(idx);
+      row.appendChild(cb);
       row.appendChild(el('span', { class: 'text-xs pal-muted font-mono mr-1 mt-1' }, `${idx + 1}.`));
       const editing = this._editingStepIdx === idx;
       if (editing) {
         const input = el('textarea', { class: 'form-input flex-1', rows: '2' });
-        input.value = s;
-        const commit = () => { this._editingStepIdx = null; this.submitEditStep(idx, s, input.value); };
+        input.value = displayText;
+        const commit = () =>
+        {
+          this._editingStepIdx = null;
+          const prefix = done ? '[x] ' : (s && s.startsWith('[ ] ') ? '[ ] ' : '');
+          this.submitEditStep(idx, s, prefix + input.value);
+        };
         const cancel = () => { this._editingStepIdx = null; render(); };
         input.onkeydown = (e) => {
           if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commit(); }
@@ -79,8 +103,8 @@ export class TaskView extends TodoItemView {
         row.appendChild(input);
         setTimeout(() => { input.focus(); input.select(); }, 0);
       } else {
-        const body = el('div', { class: 'flex-1 body-md prose prose-invert prose-sm max-w-none' });
-        body.innerHTML = marked.parse(s);
+        const body = el('div', { class: 'flex-1 body-md prose prose-invert prose-sm max-w-none' + (done ? ' step-done' : '') });
+        body.innerHTML = marked.parse(displayText);
         row.appendChild(body);
       }
       row.appendChild(el('button', {

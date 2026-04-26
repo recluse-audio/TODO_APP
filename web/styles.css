@@ -4,6 +4,8 @@
 .pal-link { color: var(--color-link); }
 .pal-border { border-color: var(--color-border); }
 .pal-surface { background: var(--color-surface); }
+.step-done { opacity: 0.55; text-decoration: line-through; }
+.step-done * { text-decoration: line-through; }
 
 /* Tab buttons */
 .tab-btn {

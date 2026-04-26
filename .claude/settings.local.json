@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p C:/REPOS/PROJECTS/CSS_COLOR_PALETTE/.claude)",
+      "Read(//c/REPOS/PROJECTS/CSS_COLOR_PALETTE/**)"
+    ]
+  }
+}
