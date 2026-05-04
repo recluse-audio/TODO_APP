@@ -1,16 +1,9 @@
 import { state, el, $ } from '../core/state.js';
 import { subGoalsOf, byPriorityDesc, allGroups, groupColor } from '../core/data.js';
-import { openModal } from './modal.js';
 
 export function renderSidebar() {
   const sb = $('#sidebar');
   sb.innerHTML = '';
-  const btns = el('div', { class: 'create-btns' });
-  btns.appendChild(el('button', { class: 'create-btn', type: 'button', onclick: () => openModal('decision') }, '+ DECISION'));
-  btns.appendChild(el('button', { class: 'create-btn', type: 'button', onclick: () => openModal('goal') }, '+ GOAL'));
-  btns.appendChild(el('button', { class: 'create-btn', type: 'button', onclick: () => openModal('task') }, '+ TASK'));
-  sb.appendChild(btns);
-
   sb.appendChild(renderGroupFilter());
 
   if (state.tab === 'hierarchy') renderHierarchy(sb);

@@ -4,12 +4,13 @@ import { state, $, $$ } from './core/state.js';
 import { api } from './core/api.js';
 import { topLevelGoals } from './core/data.js';
 import { wrapSnapshot } from './views/index.js';
-import { initModal } from './ui/modal.js';
+import { initModal, openModal } from './ui/modal.js';
 import { render, setTab } from './ui/render.js';
 
 async function bootstrap() {
   initModal();
   $$('.tab-btn').forEach(b => b.onclick = () => setTab(b.dataset.tab));
+  $$('.split-tab-add').forEach(b => b.onclick = () => openModal(b.dataset.create));
   try {
     state.data = wrapSnapshot(await api('/api/data'));
     const savedLastByTab = JSON.parse(localStorage.getItem('todo_last_by_tab') || 'null');

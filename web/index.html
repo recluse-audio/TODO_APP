@@ -14,10 +14,21 @@
     <header class="px-5 py-3 flex items-center gap-4 shrink-0" style="border-bottom: 1px solid var(--color-border);">
       <h1 class="text-sm font-semibold tracking-wide" style="color: var(--color-logo);">TODO</h1>
       <div id="conn-indicator" class="text-xs" style="color: var(--color-accent);">connecting…</div>
-      <div class="ml-auto flex items-center gap-2">
-        <button data-tab="decisions" class="tab-btn px-3 py-1 rounded text-xs font-medium">DECISIONS</button>
-        <button data-tab="hierarchy" class="tab-btn px-3 py-1 rounded text-xs font-medium">GOALS</button>
-        <button data-tab="tasks" class="tab-btn px-3 py-1 rounded text-xs font-medium">TASKS</button>
+      <div class="ml-auto flex items-center gap-3">
+        <div class="split-tabs">
+          <div class="split-tab">
+            <button data-tab="decisions" class="tab-btn split-tab-label">DECISIONS</button>
+            <button data-create="decision" class="split-tab-add" title="New decision">+</button>
+          </div>
+          <div class="split-tab">
+            <button data-tab="hierarchy" class="tab-btn split-tab-label">GOALS</button>
+            <button data-create="goal" class="split-tab-add" title="New goal">+</button>
+          </div>
+          <div class="split-tab">
+            <button data-tab="tasks" class="tab-btn split-tab-label">TASKS</button>
+            <button data-create="task" class="split-tab-add" title="New task">+</button>
+          </div>
+        </div>
         <palette-controls></palette-controls>
       </div>
     </header>
